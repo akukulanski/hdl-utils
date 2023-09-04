@@ -16,7 +16,7 @@ python3 -m pip install git+https://github.com/akukulanski/hdl-utils.git
 
 Test:
 ```bash
-python3 -m pytest -o log_cli=True -vs example/test_counter.py
+python3 -m pytest -o log_cli=True -vs example/test_cores.py
 ```
 
 Generate verilog:
