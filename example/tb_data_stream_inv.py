@@ -1,6 +1,6 @@
 import cocotb
 from cocotb.clock import Clock
-from cocotb import fork
+from cocotb import start_soon
 from cocotb.triggers import RisingEdge
 import numpy as np
 
@@ -19,7 +19,7 @@ class Testbench:
                                      clock=dut.clk)
 
     async def init_test(self):
-        fork(Clock(self.dut.clk, self.clk_period, units='ns').start())
+        start_soon(Clock(self.dut.clk, self.clk_period, units='ns').start())
         self.dut.rst.value = 1
         for _ in range(3):
             await RisingEdge(self.dut.clk)
@@ -34,7 +34,7 @@ async def check_core(dut):
 
     data = [i for i in range(256)]
 
-    p_reader = fork(tb.slave.read())
+    p_reader = start_soon(tb.slave.read())
     await tb.master.write(data)
     rd = await p_reader
 
