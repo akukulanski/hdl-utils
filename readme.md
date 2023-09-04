@@ -2,8 +2,6 @@
 
 Utils for an HDL workflow with Amaranth as HDL framework and Cocotb as testing framework.
 
-![hdl-workflow](./doc/hdl-workflow.png)
-
 ## Install
 
 ```bash
@@ -24,3 +22,7 @@ Generate verilog:
 python3 example/counter.py 8 > counter.v
 cat counter.v
 ```
+
+## Workflow
+
+![hdl-workflow](./doc/hdl-workflow.png)
