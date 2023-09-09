@@ -1,23 +1,19 @@
 import amaranth_cocotb
 from cocotb_test.simulator import run as cocotb_run
 import os
+import pytest
 import tempfile
 import unittest
 
 from utils import set_env
 
 
-class TestCores(unittest.TestCase):
+class TestCores:
 
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
-
-    def test_counter(self):
+    @pytest.mark.parametrize('width', [4, 7])
+    def test_counter(self, width):
         from counter import Counter
-        width = 16
+        # width = 16
         core = Counter(width=width)
         ports = core.get_ports()
         test_module = 'tb_counter'
@@ -52,7 +48,7 @@ endmodule
 """
 
 
-class TestbenchCoresVerilog(unittest.TestCase):
+class TestbenchCoresVerilog:
 
     def run_testbench(self,
                       verilog_sources: list,
@@ -123,7 +119,8 @@ class TestbenchCoresVerilog(unittest.TestCase):
                     sim_build=d,
                     )
 
-    def test_counter(self):
+    @pytest.mark.parametrize('width', [4, 7])
+    def test_counter(self, width):
         verilog_sources = [
             'example/counter.v',
         ]
@@ -134,7 +131,7 @@ class TestbenchCoresVerilog(unittest.TestCase):
         # Waveform file
         vcd_file = './counter.v.vcd'
         # Parameters
-        width = 24
+        # width = 7
         # Extra args - parameters
         parameters = {
             'WIDTH': width,
