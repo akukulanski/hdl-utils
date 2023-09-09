@@ -1,22 +1,21 @@
 import cocotb
-from cocotb.clock import Clock
-from cocotb import start_soon
 from cocotb.triggers import RisingEdge
+import os
+
+from hdl_utils.cocotb_utils.tb import BaseTestbench
 
 
-class Testbench:
+# Parameters
+P_WIDTH = int(os.environ['P_WIDTH'])
+
+
+class Testbench(BaseTestbench):
     clk_period = 10
 
-    def __init__(self, dut):
-        self.dut = dut
 
-    async def init_test(self):
-        start_soon(Clock(self.dut.clk, self.clk_period, units='ns').start())
-        self.dut.rst.value = 1
-        for _ in range(3):
-            await RisingEdge(self.dut.clk)
-        self.dut.rst.value = 0
-        await RisingEdge(self.dut.clk)
+@cocotb.test()
+async def check_port_sizes(dut):
+    assert len(dut.count) == P_WIDTH, f'len(dut.count)={len(dut.count)}'
 
 
 @cocotb.test()
