@@ -58,6 +58,7 @@ class TestbenchCoresVerilog(unittest.TestCase):
                       verilog_sources: list,
                       top_level: str,
                       test_module: str,
+                      parameters: dict = None,
                       vcd_file: str = None,
                       extra_args: list = None,
                       ):
@@ -74,6 +75,9 @@ class TestbenchCoresVerilog(unittest.TestCase):
             test_module: str
                 name of the cocotb test module
 
+            parameters: dict
+                dictionary with parameters and values of the top level module
+
             vcd_file: str
                 Waveform file (.vcd)
 
@@ -81,11 +85,25 @@ class TestbenchCoresVerilog(unittest.TestCase):
                 extra compile args for icarus verilog
         """
 
+        # Compile args
         compile_args = []
+        if parameters:
+            compile_args += [
+                f'-P{top_level}.{param}={value}'
+                for param, value in parameters.items()]
         if vcd_file:
             compile_args += compile_args_waveforms
         if extra_args:
             compile_args += extra_args
+
+        # Environment variables
+        env = {}
+        if parameters:
+            # Add P_* env vars to be accesible in testbench
+            env.update({
+                f'P_{param}': str(value)
+                for param, value in parameters.items()
+            })
 
         with tempfile.TemporaryDirectory() as d:
             if vcd_file:
@@ -95,14 +113,15 @@ class TestbenchCoresVerilog(unittest.TestCase):
                     f.write(verilog_waveforms.format(vcd_file, top_level))
                 verilog_sources.append(verilog_dump_file)
 
-            cocotb_run(
-                simulator='icarus',
-                verilog_sources=verilog_sources,
-                toplevel=top_level,
-                module=test_module,
-                compile_args=compile_args,
-                sim_build=d,
-                )
+            with set_env(**env):
+                cocotb_run(
+                    simulator='icarus',
+                    verilog_sources=verilog_sources,
+                    toplevel=top_level,
+                    module=test_module,
+                    compile_args=compile_args,
+                    sim_build=d,
+                    )
 
     def test_counter(self):
         verilog_sources = [
@@ -120,13 +139,6 @@ class TestbenchCoresVerilog(unittest.TestCase):
         parameters = {
             'WIDTH': width,
         }
-        extra_args = [
-            f'-P{top_level}.{param}={value}' for param, value in parameters.items()]
-        # Env
-        env = {
-            f'P_{param}': str(value) for param, value in parameters.items()
-        }
-        with set_env(**env):
-            self.run_testbench(
-                verilog_sources, top_level, test_module, vcd_file,
-                extra_args=extra_args)
+        self.run_testbench(
+            verilog_sources, top_level, test_module,
+            parameters=parameters, vcd_file=vcd_file)
