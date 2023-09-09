@@ -3,7 +3,6 @@ from cocotb_test.simulator import run as cocotb_run
 import os
 import pytest
 import tempfile
-import unittest
 
 from utils import set_env
 
@@ -13,7 +12,6 @@ class TestCores:
     @pytest.mark.parametrize('width', [4, 7])
     def test_counter(self, width):
         from counter import Counter
-        # width = 16
         core = Counter(width=width)
         ports = core.get_ports()
         test_module = 'tb_counter'
@@ -131,8 +129,6 @@ class TestbenchCoresVerilog:
         # Waveform file
         vcd_file = './counter.v.vcd'
         # Parameters
-        # width = 7
-        # Extra args - parameters
         parameters = {
             'WIDTH': width,
         }
