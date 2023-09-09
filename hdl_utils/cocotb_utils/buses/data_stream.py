@@ -15,8 +15,16 @@ class DataStreamBase(BusDriver):
 
     _optional_signals = []
 
-    def __len__(self):
-        return 2**len(self.bus.data)
+    async def run_monitor(self):
+        self.monitor = []
+        current_stream = []
+        while True:
+            await RisingEdge(self.clock)
+            if self.bus.valid.value.integer and self.bus.ready.value.integer:
+                current_stream.append(self.bus.data.value.integer)
+                if self.bus.last.value.integer:
+                    self.monitor.append(current_stream)
+                    current_stream = []
 
 
 class DataStreamMaster(DataStreamBase):
