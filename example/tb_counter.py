@@ -23,6 +23,6 @@ async def check_count(dut):
     tb = Testbench(dut)
     await tb.init_test()
 
-    for i in range(256):
-        assert tb.dut.count.value.integer == i
+    for i in range(2**P_WIDTH + 1):
+        assert tb.dut.count.value.integer == (i % (2**P_WIDTH))
         await RisingEdge(tb.dut.clk)
