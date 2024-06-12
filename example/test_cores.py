@@ -27,6 +27,19 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         vcd_file = './data_stream_inv.vcd'
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file)
 
+    @pytest.mark.parametrize('cls_id', ['A', 'B'])
+    def test_triple_inverter(self, cls_id):
+        from stream_signature import TripleInverter_A, TripleInverter_B
+        core_cls = {
+            'A': TripleInverter_A,
+            'B': TripleInverter_B,
+        }[cls_id]
+        core = core_cls()
+        ports = core.get_ports()
+        test_module = 'tb_stream_signature'
+        vcd_file = './stream_signature.vcd'
+        self.run_testbench(core, test_module, ports, vcd_file=vcd_file)
+
 
 class TestbenchCoresVerilog(TemplateTestbenchVerilog):
 
