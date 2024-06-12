@@ -4,7 +4,8 @@ import setuptools
 install_requires = [
     'cocotb',
     'cocotb_bus',
-    'amaranth @ git+https://github.com/amaranth-lang/amaranth.git@f135226a79fddf5caf894030ac7f49995774c3a7',
+    # 'amaranth @ git+https://github.com/amaranth-lang/amaranth.git@f135226a79fddf5caf894030ac7f49995774c3a7',
+    'amaranth @ git+https://github.com/amaranth-lang/amaranth.git',
     'amaranth-cocotb @ git+https://github.com/akukulanski/amaranth-cocotb.git@compat-cocotb-test-0.2.2',
     'pytest',
     'numpy',
@@ -23,6 +24,6 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     install_requires=install_requires,
 )
