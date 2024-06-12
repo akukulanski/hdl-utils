@@ -37,7 +37,7 @@ def generate_verilog(core: Elaboratable,
     fragment = Fragment.get(core, None)
     output = verilog.convert(fragment, name=name, ports=ports)
 
-    output = re.sub(r'\*\)', '*/', re.sub(r'\(\*','/*', output))
+    output = re.sub(r'\*\)', '*/', re.sub(r'\(\*', '/*', output))
     output = output.replace('__', '_')
     output = re.sub(f'module (?!{name})', f'module {prefix}_', output)
 
