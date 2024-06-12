@@ -61,11 +61,12 @@ class DataStreamInv(wiring.Component):
 
 
 # Option 1: Elaboratable, and create signatures in __init__
+# Why? To be able to parametrize widths
 class BaseAsElaboratable(Elaboratable):
 
-    def __init__(self):
-        self.sink = SimpleStreamSignature(8).flip().create()
-        self.source = SimpleStreamSignature(8).create()
+    def __init__(self, width=8):
+        self.sink = SimpleStreamSignature(width).flip().create()
+        self.source = SimpleStreamSignature(width).create()
 
 
 # Option 2: declare the signatures in the class
