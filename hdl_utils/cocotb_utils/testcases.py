@@ -29,6 +29,7 @@ class TemplateTestbenchVerilog:
                       parameters: dict = None,
                       vcd_file: str = None,
                       extra_args: list = None,
+                      includes: list = None,
                       ):
 
         """
@@ -89,6 +90,7 @@ class TemplateTestbenchVerilog:
                     module=test_module,
                     compile_args=compile_args,
                     sim_build=d,
+                    includes=includes,
                 )
 
 
