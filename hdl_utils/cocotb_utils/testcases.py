@@ -80,7 +80,7 @@ class TemplateTestbenchVerilog:
                 verilog_dump_file = os.path.join(d, 'waveforms.v')
                 with open(verilog_dump_file, 'w') as f:
                     f.write(verilog_waveforms.format(vcd_file, top_level))
-                verilog_sources.append(verilog_dump_file)
+                verilog_sources = [*verilog_sources, verilog_dump_file]  # copy!
 
             with set_env(**env):
                 cocotb_run(
