@@ -37,8 +37,11 @@ def generate_verilog(core: Elaboratable,
     fragment = Fragment.get(core, None)
     output = verilog.convert(fragment, name=name, ports=ports)
 
+    # Reformat the verilog output
     output = re.sub(r'\*\)', '*/', re.sub(r'\(\*', '/*', output))
     output = output.replace('__', '_')
+    # Add prefix to the modules to avoid conflicts between cores that have
+    # submodules with repeating names
     output = re.sub(f'module (?!{name})', f'module {prefix}_', output)
 
     return output
