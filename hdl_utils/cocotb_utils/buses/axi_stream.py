@@ -24,7 +24,12 @@ class AXIStreamBase(BusDriver):
 
     def __init__(self, *args, **kwargs):
         self.monitor = []
+        self.current_stream = []
         super().__init__(*args, **kwargs)
+
+    def accepted(self):
+        return bool(self.bus.tvalid.value.integer and
+                    self.bus.tready.value.integer)
 
     def tdata_int(self):
         return self.bus.tdata.value.integer
@@ -39,22 +44,30 @@ class AXIStreamBase(BusDriver):
             return self.bus.tkeep.value.integer
         return None
 
+    def tlast_int(self):
+        if hasattr(self.bus, 'tlast'):
+            return self.bus.tlast.value.integer
+        return None
+
     def _capture_current_values(self):
         return (self.tdata_int(), self.tuser_int(), self.tkeep_int())
 
     async def run_monitor(self):
-        self.monitor = []
-        current_stream = []
+        self.monitor.clear()
+        self.current_stream.clear()
         while True:
             await RisingEdge(self.clock)
-            if self.bus.tvalid.value.integer and self.bus.tready.value.integer:
-                current_stream.append(self._capture_current_values())
+            if self.accepted():
+                self.current_stream.append(self._capture_current_values())
                 if self.bus.tlast.value.integer:
-                    self.monitor.append(current_stream)
-                    current_stream = []
+                    self.monitor.append(self.current_stream)
+                    self.current_stream = []
 
     def get_monitor(self):
         return list(self.monitor)  # a copy
+
+    def get_current_stream(self):
+        return list(self.current_stream)  # a copy
 
     def extract_capture_data(self, capture):
         return [d for d, u, k in capture]
