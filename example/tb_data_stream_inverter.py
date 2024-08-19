@@ -36,7 +36,7 @@ async def check_core(dut):
     start_soon(tb.master.run_monitor())
     start_soon(tb.slave.run_monitor())
 
-    data_in = [i for i in range(256)]
+    data_in = list(range(256))
     expected_data_out = [~np.uint8(d) for d in data_in]
 
     p_reader = start_soon(tb.slave.read())

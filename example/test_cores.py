@@ -19,12 +19,20 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
 
-    def test_data_stream_inv(self):
-        from data_stream_inv import DataStreamInv
-        core = DataStreamInv(width=8)
+    def test_data_stream_inverter(self):
+        from data_stream_inverter import DataStreamInverter
+        core = DataStreamInverter(width=8)
         ports = core.get_ports()
-        test_module = 'tb_data_stream_inv'
+        test_module = 'tb_data_stream_inverter'
         vcd_file = './data_stream_inv.vcd'
+        self.run_testbench(core, test_module, ports, vcd_file=vcd_file)
+
+    def test_data_stream_pass_through(self):
+        from data_stream_pass_through import DataStreamPassThrough
+        core = DataStreamPassThrough(width=8)
+        ports = core.get_ports()
+        test_module = 'tb_data_stream_pass_through'
+        vcd_file = './data_stream_pass_through.vcd'
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file)
 
     @pytest.mark.parametrize('cls_id', ['A', 'B'])
