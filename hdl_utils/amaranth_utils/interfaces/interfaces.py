@@ -1,82 +1,92 @@
-from amaranth.hdl.rec import Record, DIR_FANIN, DIR_FANOUT
+from __future__ import annotations
+
+from amaranth import Elaboratable, Module, Signal
+from amaranth.lib import wiring
+from amaranth.lib.wiring import In, Out
 
 
-__all__ = ['DataStreamMaster', 'DataStreamSlave']
+__all__ = [
+    'extract_signals_from_wiring',
+    'DataStreamSignature',
+    'DataStreamInterface',
+    'SlaveDataStreamInterface',
+    'MasterDataStreamInterface',
+]
 
 
-def to_direction(interface, d):
-    assert interface in ['master', 'slave']
-    assert d in ['m_to_s', 's_to_m']
-
-    if interface == 'master':
-        return DIR_FANOUT if d == 'm_to_s' else DIR_FANIN
-    else:
-        return DIR_FANOUT if d == 's_to_m' else DIR_FANIN
-
-
-def get_stream_layout(interface, data_w):
-    assert interface in ['master', 'slave']
-    layout = [
-        ("valid", 1, "m_to_s"),
-        ("last", 1, "m_to_s"),
-        ("data", data_w, "m_to_s"),
-        ("ready", 1, "s_to_m"),
-    ]
-    return [(f, w, to_direction(interface, d)) for f, w, d in layout]
+def extract_signals_from_wiring(signature: wiring.Signature):
+    """
+    Signature can have signals or nested signatures.
+    This generator finds signals recursively.
+    """
+    signature_dict = signature.__dict__
+    for k in signature_dict.keys():
+        if k == 'signature':
+            continue
+        if isinstance(signature_dict[k], Signal):
+            yield signature_dict[k]
+        else:
+            yield from extract_signals_from_wiring(signature_dict[k])
 
 
-def connect_m2s(master, slave, exclude=None):
-    exclude = exclude or ()
-    layout = [(k, v[1]) for k, v in master.layout.fields.items()]
-    ret = [master[f].eq(slave[f])
-           for f, d in layout if d == DIR_FANIN
-           if f not in exclude]
-    ret += [slave[f].eq(master[f])
-            for f, d in layout if d == DIR_FANOUT
-            if f not in exclude]
-    return ret
+# from: https://amaranth-lang.org/docs/amaranth/latest/stdlib/wiring.html#reusable-interfaces
+class DataStreamSignature(wiring.Signature):
+
+    def __init__(self, data_w: int):
+        super().__init__({
+            "data": Out(data_w),
+            "valid": Out(1),
+            "ready": In(1),
+            "last": Out(1)
+        })
+
+    def __eq__(self, other):
+        return self.members == other.members
+
+    def create(self, *, path=None, src_loc_at=0):
+        return DataStreamInterface(self, path=path, src_loc_at=1 + src_loc_at)
+
+    @classmethod
+    def create_master(cls, *, data_w: int, path=None, src_loc_at=0):
+        return MasterDataStreamInterface(cls(data_w=data_w), path=path, src_loc_at=1+src_loc_at)
+
+    @classmethod
+    def create_slave(cls, *, data_w: int, path=None, src_loc_at=0):
+        return SlaveDataStreamInterface(cls(data_w=data_w).flip(), path=path, src_loc_at=1+src_loc_at)
+
+    @classmethod
+    def connect_m2s(cls, *, m, master, slave):
+        wiring.connect(m, master, slave)
 
 
-class DataStreamBase(Record):
+class DataStreamInterface(wiring.PureInterface):
 
-    direction = None
-
-    def __init__(self, data_w, **kargs):
-        layout = get_stream_layout(self.direction, data_w)
-        Record.__init__(self, layout, **kargs)
-
+    @property
     def data_w(self):
         return len(self.data)
 
     def accepted(self):
         return self.valid & self.ready
 
-    @classmethod
-    def from_record(cls, rec, **kwargs):
-        return cls(len(rec.data), fields=rec.fields, **kwargs)
+    def extract_signals(self):
+        return list(extract_signals_from_wiring(self))
 
 
-class DataStreamMaster(DataStreamBase):
-
-    direction = 'master'
-
-    def connect(self, slave):
-        assert isinstance(slave, DataStreamSlave)
-        return connect_m2s(self, slave)
-
-    def as_slave(self):
-        name = self.name + '_as_slave' if self.name else None
-        return DataStreamSlave.from_record(self, name=name)
-
-
-class DataStreamSlave(DataStreamBase):
-
-    direction = 'slave'
-
-    def connect(self, master):
-        assert isinstance(master, DataStreamSlave)
-        return connect_m2s(master, self)
+class SlaveDataStreamInterface(DataStreamInterface):
 
     def as_master(self):
-        name = self.name + '_as_master' if self.name else None
-        return DataStreamMaster.from_record(self, name=name)
+        return wiring.flipped(self)
+
+    def connect(self, m, master):
+        print(f'SlaveDataStreamInterface.connect(master={master})')
+        return wiring.connect(m, master, self)
+
+
+class MasterDataStreamInterface(DataStreamInterface):
+
+    def as_slave(self):
+        return wiring.flipped(self)
+
+    def connect(self, m, slave):
+        print(f'MasterDataStreamInterface.connect(slave={slave})')
+        return wiring.connect(m, self, slave)
