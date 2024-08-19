@@ -136,6 +136,7 @@ class AXIStreamMaster(AXIStreamBase):
         keep: Union[int, Sequence[int]] = None,
         user: Union[int, Sequence[int]] = None,
         burps: bool = False,
+        force_sync_clk_edge: bool = True,
     ) -> None:
         """Send data."""
 
@@ -150,6 +151,8 @@ class AXIStreamMaster(AXIStreamBase):
         keep = _as_iter(keep) if keep is not None else [None] * len(data)
         user = _as_iter(user) if user is not None else [None] * len(data)
 
+        if force_sync_clk_edge:
+            await RisingEdge(self.clock)
         for d, k, u in zip(data[:-1], keep[:-1], user[:-1]):
             while burps and random.getrandbits(1):
                 await RisingEdge(self.clock)
@@ -197,11 +200,18 @@ class AXIStreamSlave(AXIStreamBase):
         self.bus.tready.value = 0
         return (value, last)
 
-    async def read(self, length: int = None, ignore_last=False,
-                   burps: bool = False) -> Sequence[int]:
+    async def read(
+        self,
+        length: int = None,
+        ignore_last: bool = False,
+        burps: bool = False,
+        force_sync_clk_edge: bool = True,
+    ) -> Sequence[int]:
         """Receive data."""
         data = []
         count = 0
+        if force_sync_clk_edge:
+            await RisingEdge(self.clock)
         while True:
             while burps and random.getrandbits(1):
                 await RisingEdge(self.clock)
