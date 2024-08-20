@@ -2,6 +2,18 @@
 
 Utils for an HDL workflow with Amaranth as HDL framework and Cocotb as testing framework.
 
+**Note:** This is not more than an unified place where I can add utils that I use in multiple places.
+
+Amaranth Utils:
+* `hdl_utils.amaranth_utils.generate_verilog`: generate verilog from Amaranth cores.
+* `hdl_utils.amaranth_utils.interfaces`: DataStream interfaces.
+
+Cocotb Utils:
+* `hdl_utils.cocotb_utils.testcases`: classes `TemplateTestbenchVerilog` and `TemplateTestbenchAmaranth` to create pytest testcases that run testbenches.
+* `hdl_utils.cocotb_utils.tb`: class `BaseTestbench` with clk and reset.
+* `hdl_utils.cocotb_utils.tb_utils`: misc useful functions.
+* `hdl_utils.cocotb_utils.buses`: Stream and AXI Stream buses for testbenches.
+
 ## Install
 
 ```bash
