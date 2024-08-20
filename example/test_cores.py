@@ -76,12 +76,12 @@ class TestbenchCoresVerilog(TemplateTestbenchVerilog):
                             ])
     def test_uart_rx(self, uart_clk_div):
         verilog_sources = [
-            'example/uart/uart_rx.v',
+            'example/uart_rx.v',
         ]
         # top level HDL
         top_level = 'uart_rx'
         # name of cocotb test module
-        test_module = 'uart.tb_uart_rx'
+        test_module = 'tb.tb_uart_rx'
         # Waveform file
         vcd_file = './uart_rx.v.vcd'
         # Parameters
