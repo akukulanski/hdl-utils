@@ -10,26 +10,36 @@ python3 -m venv venv
 python3 -m pip install git+https://github.com/akukulanski/hdl-utils.git
 ```
 
-## Run example
+## Examples
 
-* Counter:
-    - HDL: [example/counter.py](example/counter.py)
-    - Testbench: [example/tb_counter.py](example/tb_counter.py)
-* DataStreamInv:
-    - HDL: [example/data_stream_inv.py](example/data_stream_inv.py)
-    - Testbench: [example/tb_data_stream_inv.py](example/tb_data_stream_inv.py)
-* Stream inverter with signatures:
-    - HDL: [example/stream_signature.py](example/stream_signature.py)
-    - Testbench: [example/tb_stream_signature.py](example/tb_stream_signature.py)
-* Test runner: [example/test_cores.py](example/test_cores.py)
+Files:
+```console
+$ tree example/
+example/
+├── counter.py
+├── counter.v
+├── data_stream_inverter.py
+├── data_stream_pass_through.py
+├── stream_signature.py
+├── tb
+│   ├── tb_counter.py
+│   ├── tb_data_stream_inverter.py
+│   ├── tb_data_stream_pass_through.py
+│   ├── tb_stream_signature.py
+│   └── tb_uart_rx.py
+├── test_cores.py
+└── uart_rx.v
 
-Generate Verilog for Counter with:
+2 directories, 12 files
+```
+
+Generate Verilog from Counter in Amaranth:
 ```bash
 python3 example/counter.py 8 > counter.v
 cat counter.v
 ```
 
-Generate Verilog for stream inverter with signatures:
+Generate Verilog from stream inverter with signatures in Amaranth:
 ```bash
 python3 example/stream_signature.py > inverter.v
 cat inverter.v
