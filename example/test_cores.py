@@ -11,7 +11,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         from counter import Counter
         core = Counter(width=width)
         ports = core.get_ports()
-        test_module = 'tb_counter'
+        test_module = 'tb.tb_counter'
         vcd_file = './counter.py.vcd'
         env = {
             'P_WIDTH': str(width)
@@ -23,7 +23,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         from data_stream_inverter import DataStreamInverter
         core = DataStreamInverter(width=8)
         ports = core.get_ports()
-        test_module = 'tb_data_stream_inverter'
+        test_module = 'tb.tb_data_stream_inverter'
         vcd_file = './data_stream_inv.vcd'
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file)
 
@@ -31,7 +31,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         from data_stream_pass_through import DataStreamPassThrough
         core = DataStreamPassThrough(width=8)
         ports = core.get_ports()
-        test_module = 'tb_data_stream_pass_through'
+        test_module = 'tb.tb_data_stream_pass_through'
         vcd_file = './data_stream_pass_through.vcd'
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file)
 
@@ -44,7 +44,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         }[cls_id]
         core = core_cls()
         ports = core.get_ports()
-        test_module = 'tb_stream_signature'
+        test_module = 'tb.tb_stream_signature'
         vcd_file = './stream_signature.vcd'
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file)
 
@@ -59,7 +59,7 @@ class TestbenchCoresVerilog(TemplateTestbenchVerilog):
         # top level HDL
         top_level = 'Counter'
         # name of cocotb test module
-        test_module = 'tb_counter'
+        test_module = 'tb.tb_counter'
         # Waveform file
         vcd_file = './counter.v.vcd'
         # Parameters
