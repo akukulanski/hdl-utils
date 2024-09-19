@@ -9,6 +9,7 @@ from hdl_utils.amaranth_utils.interfaces.interfaces import (
 
 __all__ = [
     'extract_signals_from_wiring',
+    'AXI4StreamSignature',
     'AXI4StreamInterface',
     'SlaveAXI4StreamInterface',
     'MasterAXI4StreamInterface',
@@ -16,7 +17,7 @@ __all__ = [
 
 
 # from: https://amaranth-lang.org/docs/amaranth/latest/stdlib/wiring.html#reusable-interfaces
-class AXI4Stream(wiring.Signature):
+class AXI4StreamSignature(wiring.Signature):
 
     def __init__(self, data_w: int, user_w: int):
         super().__init__({
@@ -34,21 +35,41 @@ class AXI4Stream(wiring.Signature):
         return AXI4StreamInterface(self, path=path, src_loc_at=1 + src_loc_at)
 
     @classmethod
-    def create_master(cls, *, data_w: int, path=None, src_loc_at=0):
-        return MasterAXI4StreamInterface(cls(data_w=data_w), path=path,
-                                         src_loc_at=1+src_loc_at)
+    def create_master(
+        cls,
+        *,
+        data_w: int,
+        user_w: int,
+        path=None,
+        src_loc_at=0
+    ) -> MasterAXI4StreamInterface:
+        return MasterAXI4StreamInterface(
+            cls(data_w=data_w, user_w=user_w),
+            path=path,
+            src_loc_at=1+src_loc_at
+        )
 
     @classmethod
-    def create_slave(cls, *, data_w: int, path=None, src_loc_at=0):
-        return SlaveAXI4StreamInterface(cls(data_w=data_w).flip(), path=path,
-                                        src_loc_at=1+src_loc_at)
+    def create_slave(
+        cls,
+        *,
+        data_w: int,
+        user_w: int,
+        path=None,
+        src_loc_at=0
+    ) -> SlaveAXI4StreamInterface:
+        return SlaveAXI4StreamInterface(
+            cls(data_w=data_w, user_w=user_w).flip(),
+            path=path,
+            src_loc_at=1+src_loc_at
+        )
 
     @classmethod
     def connect_m2s(cls, *, m, master, slave):
         wiring.connect(m, master, slave)
 
 
-def connect_to_null_source(m, iface: AXI4StreamInterface):
+def connect_to_null_source(iface: AXI4StreamInterface):
     return [
         iface.tvalid.eq(0),
         iface.tlast.eq(0),
@@ -57,9 +78,15 @@ def connect_to_null_source(m, iface: AXI4StreamInterface):
     ]
 
 
-def connect_to_null_sink(m, iface: AXI4StreamInterface):
+def connect_to_null_sink(iface: AXI4StreamInterface):
     return [
         iface.tready.eq(1),
+    ]
+
+
+def disconnect_from_sink(iface: AXI4StreamInterface):
+    return [
+        iface.tready.eq(0),
     ]
 
 
@@ -94,6 +121,9 @@ class SlaveAXI4StreamInterface(AXI4StreamInterface):
     def connect_to_null_sink(self):
         return connect_to_null_sink(self.as_master())
 
+    def disconnect_from_sink(self):
+        return disconnect_from_sink(self.as_master())
+
 
 class MasterAXI4StreamInterface(AXI4StreamInterface):
 
@@ -108,3 +138,6 @@ class MasterAXI4StreamInterface(AXI4StreamInterface):
 
     def connect_to_null_sink(self):
         return connect_to_null_sink(self)
+
+    def disconnect_from_sink(self):
+        return disconnect_from_sink(self)

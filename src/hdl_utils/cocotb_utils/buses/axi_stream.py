@@ -9,8 +9,23 @@ from cocotb_bus.drivers import BusDriver
 __all__ = [
     'AXIStreamBase',
     'AXIStreamMaster',
-    'AXIStreamSlave'
+    'AXIStreamSlave',
+    'extract_capture_data',
+    'extract_capture_user',
+    'extract_capture_keep',
 ]
+
+
+def extract_capture_data(capture):
+    return [d for d, u, k in capture]
+
+
+def extract_capture_user(capture):
+    return [u for d, u, k in capture]
+
+
+def extract_capture_keep(capture):
+    return [k for d, u, k in capture]
 
 
 class AXIStreamBase(BusDriver):
@@ -70,13 +85,16 @@ class AXIStreamBase(BusDriver):
         return list(self.current_stream)  # a copy
 
     def extract_capture_data(self, capture):
-        return [d for d, u, k in capture]
+        # TODO: Deprecate (kept for compatibility).
+        return extract_capture_data(capture)
 
     def extract_capture_user(self, capture):
-        return [u for d, u, k in capture]
+        # TODO: Deprecate (kept for compatibility).
+        return extract_capture_user(capture)
 
     def extract_capture_keep(self, capture):
-        return [k for d, u, k in capture]
+        # TODO: Deprecate (kept for compatibility).
+        return extract_capture_keep(capture)
 
 
 class AXIStreamMaster(AXIStreamBase):
