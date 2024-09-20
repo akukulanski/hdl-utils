@@ -77,6 +77,7 @@ class TemplateTestbenchVerilog:
         with tempfile.TemporaryDirectory() as d:
             if vcd_file:
                 vcd_file = os.path.abspath(vcd_file)
+                os.makedirs(os.path.dirname(vcd_file), exist_ok=True)
                 verilog_dump_file = os.path.join(d, 'waveforms.v')
                 with open(verilog_dump_file, 'w') as f:
                     f.write(verilog_waveforms.format(vcd_file, top_level))
@@ -105,6 +106,8 @@ class TemplateTestbenchAmaranth:
                       # extra_args: list = None,
                       ):
         env = env or {}
+        if vcd_file:
+            os.makedirs(os.path.dirname(vcd_file), exist_ok=True)
         with set_env(**env):
             amaranth_cocotb_run(
                 core,
