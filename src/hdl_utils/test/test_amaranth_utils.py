@@ -127,3 +127,48 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         }
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
+
+    @pytest.mark.skip(reason='Testbench Not Implemented')
+    @pytest.mark.parametrize('data_w,user_w,depth', [(8, 2, 16)])
+    def test_axi_stream_fifo(self, data_w: int, user_w: int, depth: int):
+        from hdl_utils.amaranth_utils.axi_stream_fifo import AXIStreamFIFO
+
+        core = AXIStreamFIFO(
+            data_w=data_w,
+            user_w=user_w,
+            depth=depth,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_stream_fifo'
+        vcd_file = f'./tb_axi_stream_fifo_{data_w}_{user_w}_{depth}.vcd'
+        env = {
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+            'P_DEPTH': str(depth)
+        }
+        self.run_testbench(core, test_module, ports,
+                           vcd_file=vcd_file, env=env)
+
+    @pytest.mark.parametrize('data_w,user_w,depth', [(8, 2, 8)])
+    def test_axi_stream_fifo_cdc(self, data_w: int, user_w: int, depth: int):
+        from hdl_utils.amaranth_utils.axi_stream_fifo import AXIStreamFIFO
+
+        core = AXIStreamFIFO.CreateCDC(
+            data_w=data_w,
+            user_w=user_w,
+            depth=depth,
+            r_domain='rd_domain',
+            w_domain='wr_domain',
+            # fifo_cls: Elaboratable = AsyncFIFO,
+            # fifo_cls: Elaboratable = AsyncFIFOBuffered,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_stream_fifo_cdc'
+        vcd_file = f'./tb_axi_stream_fifo_cdc_{data_w}_{user_w}_{depth}.vcd'
+        env = {
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+            'P_DEPTH': str(depth)
+        }
+        self.run_testbench(core, test_module, ports,
+                           vcd_file=vcd_file, env=env)
