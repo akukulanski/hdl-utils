@@ -5,6 +5,82 @@ from hdl_utils.cocotb_utils.testcases import TemplateTestbenchAmaranth
 
 class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
 
+    @pytest.mark.parametrize('data_w,user_w', [(8, 4)])
+    def test_axi_stream_interface_a(
+        self,
+        data_w: int,
+        user_w: int,
+    ):
+        from amaranth import Elaboratable, Module, Signal
+        from amaranth.lib import wiring
+        from hdl_utils.amaranth_utils.interfaces.axi4_stream import (
+            AXI4StreamSignature)
+        m_axis = AXI4StreamSignature.create_master(data_w=data_w, user_w=user_w)
+        s_axis = AXI4StreamSignature.create_slave(data_w=data_w, user_w=user_w)
+        for iface in (m_axis, s_axis):
+            assert len(iface.tdata) == data_w
+            assert len(iface.tuser) == user_w
+            assert len(iface.tkeep) == data_w // 8
+            assert len(iface.tvalid) == 1
+            assert len(iface.tready) == 1
+            assert len(iface.tlast) == 1
+
+        m = Module()
+        wiring.connect(m, s_axis.as_master(), m_axis.as_slave())
+        m.d.sync += Signal().eq(~Signal())
+
+        class Dummy(Elaboratable):
+            def elaborate(self, platform):
+                return m
+
+        core = Dummy()
+        ports = m_axis.extract_signals() + s_axis.extract_signals()
+        test_module = 'tb.tb_axi_stream'
+        vcd_file = None
+        env = {
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+        }
+        self.run_testbench(core, test_module, ports,
+                           vcd_file=vcd_file, env=env)
+
+    @pytest.mark.parametrize('data_w,user_w', [(8, 4)])
+    def test_axi_stream_interface_b(
+        self,
+        data_w: int,
+        user_w: int,
+    ):
+        from amaranth import Elaboratable, Module, Signal
+        from hdl_utils.amaranth_utils.interfaces.axi4_stream import (
+            AXI4StreamSignature)
+        m_axis = AXI4StreamSignature.create_master(data_w=data_w, user_w=user_w)
+        s_axis = AXI4StreamSignature.create_slave(data_w=data_w, user_w=user_w)
+
+        m = Module()
+        packed = Signal(data_w + user_w + data_w // 8 + 1)
+        m.d.comb += packed.eq(s_axis.flatten())
+        m.d.comb += m_axis.assign_from_flat(packed)
+        m.d.comb += [
+            m_axis.tvalid.eq(s_axis.tvalid),
+            s_axis.tready.eq(m_axis.tready),
+        ]
+        m.d.sync += Signal().eq(~Signal())
+
+        class Dummy(Elaboratable):
+            def elaborate(self, platform):
+                return m
+
+        core = Dummy()
+        ports = m_axis.extract_signals() + s_axis.extract_signals()
+        test_module = 'tb.tb_axi_stream'
+        vcd_file = None
+        env = {
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+        }
+        self.run_testbench(core, test_module, ports,
+                           vcd_file=vcd_file, env=env)
+
     @pytest.mark.parametrize('addr_w,data_w', [(8, 32)])
     def test_axi_lite_device(self, addr_w, data_w):
         from hdl_utils.amaranth_utils.axi_lite_device import AxiLiteDevice
