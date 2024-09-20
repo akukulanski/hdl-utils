@@ -17,9 +17,25 @@ Cocotb Utils:
 ## Install
 
 ```bash
-python3 -m venv venv
-. venv/bin/activate
-python3 -m pip install git+https://github.com/akukulanski/hdl-utils.git
+uv venv
+uv pip install git+https://github.com/akukulanski/hdl-utils.git
+
+# Check
+uv run python3 -c "import hdl_utils; print(f'{hdl_utils.__file__}')"
+```
+
+## Run tests
+
+```bash
+# Clone repo
+git clone https://github.com/akukulanski/hdl-utils.git
+cd hdl-utils
+
+# Sync dependencies
+uv sync
+
+# Run tests
+uv run python3 -m pytest -vs src/hdl_utils/test/test_amaranth_utils.py --log-cli-level info
 ```
 
 ## Examples
@@ -47,19 +63,19 @@ example/
 
 Generate Verilog from Counter in Amaranth:
 ```bash
-python3 example/counter.py 8 > counter.v
+uv run python3 example/counter.py 8 > counter.v
 cat counter.v
 ```
 
 Generate Verilog from stream inverter with signatures in Amaranth:
 ```bash
-python3 example/stream_signature.py > inverter.v
+uv run python3 example/stream_signature.py > inverter.v
 cat inverter.v
 ```
 
-Run all testbenches with:
+Run all example testbenches with:
 ```bash
-python3 -m pytest -o log_cli=True -vs example/test_cores.py
+uv run python3 -m pytest -o log_cli=True -vs example/test_cores.py
 ```
 
 ## Workflow
