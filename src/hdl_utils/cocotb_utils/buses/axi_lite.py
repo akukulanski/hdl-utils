@@ -97,7 +97,7 @@ class AXI4LiteMaster(AXI4LiteBase):
         # Drive some sensible defaults (setimmediatevalue to avoid x asserts)
         _sig_to_init = [
             'AWADDR', 'AWVALID', 'WDATA', 'WSTRB', 'WVALID',
-            'BREADY', 'ARADDR', 'ARVALID', 'RVALID',
+            'BREADY', 'ARADDR', 'ARVALID', 'RREADY',
         ]
         for sig in _sig_to_init:
             getattr(self.bus, sig).setimmediatevalue(0)
