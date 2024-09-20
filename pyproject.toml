@@ -14,6 +14,8 @@ dependencies = [
     "pytest",
     "numpy",
     "amaranth-cocotb",
+    "ipython",
+    "cocotb-test",
 ]
 
 [build-system]
@@ -22,3 +24,4 @@ build-backend = "hatchling.build"
 
 [tool.uv.sources]
 amaranth-cocotb = { git = "https://github.com/akukulanski/amaranth-cocotb.git", branch = "compat-cocotb-test-0.2.2" }
+cocotb-test = { git = "https://github.com/themperek/cocotb-test", branch = "master" }
