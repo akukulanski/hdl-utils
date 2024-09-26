@@ -8,7 +8,10 @@ import re
 def generate_verilog(core: Elaboratable,
                      name: str = None,
                      ports: list = None,
-                     prefix: str = ''):
+                     prefix: str = '',
+                     remove_comments: bool = True,
+                     remove_empty_lines: bool = True,
+                     ):
     """
     Generate Verilog of a core described by an Elaboratable object.
 
@@ -39,7 +42,17 @@ def generate_verilog(core: Elaboratable,
 
     # Reformat the verilog output
     output = re.sub(r'\*\)', '*/', re.sub(r'\(\*', '/*', output))
+    # Fix duplicate underscores
     output = output.replace('__', '_')
+    # Remove comments
+    if remove_comments:
+        # regex = r'/\* src = .* \*/$'
+        regex = r'/\* .* \*/\s*'
+        output = re.sub(regex, '', output)
+    # Remove empty lines
+    if remove_empty_lines:
+        regex = r'^\s*$\n'
+        output = re.sub(regex, '', output)
     # Add prefix to the modules to avoid conflicts between cores that have
     # submodules with repeating names
     output = re.sub(f'module (?!{name})', f'module {prefix}_', output)
