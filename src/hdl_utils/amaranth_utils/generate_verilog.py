@@ -46,7 +46,6 @@ def generate_verilog(core: Elaboratable,
     output = output.replace('__', '_')
     # Remove comments
     if remove_comments:
-        # regex = r'/\* src = .* \*/$'
         regex = r'/\* .* \*/\s*'
         output = re.sub(regex, '', output)
     # Remove empty lines
@@ -55,6 +54,7 @@ def generate_verilog(core: Elaboratable,
         output = re.sub(regex, '', output)
     # Add prefix to the modules to avoid conflicts between cores that have
     # submodules with repeating names
-    output = re.sub(f'module (?!{name})', f'module {prefix}_', output)
+    # EDIT: Disabled. Now generation already uses module names "name.submodule"
+    # output = re.sub(f'module (?!{name})', f'module {prefix}_', output)
 
     return output
