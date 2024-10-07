@@ -21,15 +21,20 @@ __all__ = [
 # from: https://amaranth-lang.org/docs/amaranth/latest/stdlib/wiring.html#reusable-interfaces
 class AXI4StreamSignature(wiring.Signature):
 
-    def __init__(self, data_w: int, user_w: int):
-        super().__init__({
+    def __init__(self, data_w: int, user_w: int, no_tkeep: bool = False):
+        layout = {
             "tvalid": Out(1),
             "tready": In(1),
             "tlast": Out(1),
             "tdata": Out(data_w),
             "tuser": Out(user_w),
             "tkeep": Out(data_w // 8),
-        })
+        }
+        if user_w == 0:
+            del layout['tuser']
+        if no_tkeep:
+            del layout['tkeep']
+        super().__init__(layout)
 
     def __eq__(self, other):
         return self.members == other.members
@@ -43,11 +48,12 @@ class AXI4StreamSignature(wiring.Signature):
         *,
         data_w: int,
         user_w: int,
+        no_tkeep: bool = False,
         path=None,
         src_loc_at=0
     ) -> MasterAXI4StreamInterface:
         return MasterAXI4StreamInterface(
-            cls(data_w=data_w, user_w=user_w),
+            cls(data_w=data_w, user_w=user_w, no_tkeep=no_tkeep),
             path=path,
             src_loc_at=1+src_loc_at
         )
@@ -58,11 +64,12 @@ class AXI4StreamSignature(wiring.Signature):
         *,
         data_w: int,
         user_w: int,
+        no_tkeep: bool = False,
         path=None,
         src_loc_at=0
     ) -> SlaveAXI4StreamInterface:
         return SlaveAXI4StreamInterface(
-            cls(data_w=data_w, user_w=user_w).flip(),
+            cls(data_w=data_w, user_w=user_w, no_tkeep=no_tkeep).flip(),
             path=path,
             src_loc_at=1+src_loc_at
         )
@@ -73,12 +80,16 @@ class AXI4StreamSignature(wiring.Signature):
 
 
 def connect_to_null_source(iface: AXI4StreamInterface) -> list[Assign]:
-    return [
+    connections = [
         iface.tvalid.eq(0),
         iface.tlast.eq(0),
         iface.tdata.eq(0),
-        iface.tuser.eq(0),
     ]
+    if hasattr(iface, 'tuser'):
+        connections += [iface.tuser.eq(0)]
+    if hasattr(iface, 'tkeep'):
+        connections += [iface.tkeep.eq(0)]
+    return
 
 
 def connect_to_null_sink(iface: AXI4StreamInterface) -> Assign:
@@ -97,11 +108,11 @@ class AXI4StreamInterface(wiring.PureInterface):
 
     @property
     def user_w(self) -> int:
-        return len(self.tuser)
+        return len(self.tuser) if self.has_tuser() else 0
 
     @property
     def keep_w(self) -> int:
-        return len(self.tkeep)
+        return len(self.tkeep) if self.has_tkeep() else 0
 
     def accepted(self) -> Operator:
         return self.tvalid & self.tready
@@ -109,9 +120,25 @@ class AXI4StreamInterface(wiring.PureInterface):
     def extract_signals(self) -> list:
         return list(extract_signals_from_wiring(self))
 
+    def has_tuser(self):
+        return hasattr(self, 'tuser')
+
+    def has_tkeep(self):
+        return hasattr(self, 'tkeep')
+
+    def _safe_tuser(self):
+        return self.tuser if self.has_tuser() else None
+
+    def _safe_tkeep(self):
+        return self.tkeep if self.has_tkeep() else None
+
     @property
     def _data_fields(self):
-        return [self.tdata, self.tuser, self.tkeep, self.tlast]
+        fields = [self.tdata]
+        fields += [self.tuser] if self.has_tuser() else []
+        fields += [self.tkeep] if self.has_tkeep() else []
+        fields += [self.tlast]
+        return fields
 
     def flatten(self) -> Signal:
         return Cat(*self._data_fields)

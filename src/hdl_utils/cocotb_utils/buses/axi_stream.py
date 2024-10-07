@@ -238,3 +238,15 @@ class AXIStreamSlave(AXIStreamBase):
             count += 1
             if (last and not ignore_last) or (count == length):
                 return data
+
+    async def read_multiple(
+        self,
+        *,
+        n_streams: int,
+        **kwargs
+    ) -> list:
+        streams = []
+        for i in range(n_streams):
+            s = await self.read(**kwargs)
+            streams.append(s)
+        return streams
