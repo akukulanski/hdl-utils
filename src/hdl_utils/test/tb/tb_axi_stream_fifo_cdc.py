@@ -31,6 +31,28 @@ class Testbench:
         self.slave = AXIStreamSlave(entity=dut, name='m_axis_',
                                     clock=dut.rd_domain_clk)
 
+    def get_reset_signal_name(self, domain: str):
+        sig_pos = f'{domain}_rst'
+        sig_neg = f'{domain}_rstn'
+        if hasattr(self.dut, sig_pos):
+            assert not hasattr(self.dut, sig_neg), f'both {sig_pos} and {sig_neg} present'
+            return sig_pos
+        elif hasattr(self.dut, sig_neg):
+            assert not hasattr(self.dut, sig_pos), f'2both {sig_pos} and {sig_neg} present'
+            return sig_neg
+        else:
+            raise AttributeError('Reset signal not found for wr_domain')
+
+    def reset(self, domain: str):
+        signal_name = self.get_reset_signal_name(domain)
+        signal = getattr(self.dut, signal_name)
+        signal.value = 0 if signal_name.endswith('n') else 1
+
+    def unreset(self, domain: str):
+        signal_name = self.get_reset_signal_name(domain)
+        signal = getattr(self.dut, signal_name)
+        signal.value = 1 if signal_name.endswith('n') else 0
+
     def _init_signals(self):
         pass
 
@@ -38,14 +60,14 @@ class Testbench:
         self._init_signals()
         start_soon(Clock(self.dut.wr_domain_clk, self.period_ns_w, 'ns').start())
         start_soon(Clock(self.dut.rd_domain_clk, self.period_ns_r, 'ns').start())
-        self.dut.wr_domain_rst.value = 1
-        self.dut.rd_domain_rst.value = 1
+        self.reset('wr_domain')
+        self.reset('rd_domain')
         for _ in range(3):
             await RisingEdge(self.dut.wr_domain_clk)
         for _ in range(3):
             await RisingEdge(self.dut.rd_domain_clk)
-        self.dut.wr_domain_rst.value = 0
-        self.dut.rd_domain_rst.value = 0
+        self.unreset('wr_domain')
+        self.unreset('rd_domain')
         for _ in range(2):
             await RisingEdge(self.dut.wr_domain_clk)
             await RisingEdge(self.dut.rd_domain_clk)
@@ -73,17 +95,23 @@ async def check_ports(dut):
     assert len(dut.m_axis__tuser) == P_USER_W
     assert len(dut.m_axis__tkeep) == P_DATA_W // 8
     assert len(dut.rd_domain_clk) == 1
-    assert len(dut.rd_domain_rst) == 1
+    if hasattr(dut, 'rd_domain_rst'):
+        assert len(dut.rd_domain_rst) == 1
+    else:
+        assert len(dut.rd_domain_rstn) == 1
     assert len(dut.wr_domain_clk) == 1
-    assert len(dut.wr_domain_rst) == 1
+    if hasattr(dut, 'wr_domain_rst'):
+        assert len(dut.wr_domain_rst) == 1
+    else:
+        assert len(dut.wr_domain_rstn) == 1
 
 
 async def tb_check_core(
     dut,
-    period_ns_w,
-    period_ns_r,
-    burps_in: bool,
-    burps_out: bool,
+    period_ns_w: float = 10,
+    period_ns_r: float = 32,
+    burps_in: bool = False,
+    burps_out: bool = False,
     dummy: int = 0
 ):
     tb = Testbench(dut, period_ns_w, period_ns_r)

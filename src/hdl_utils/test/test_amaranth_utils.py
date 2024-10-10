@@ -149,8 +149,17 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
 
-    @pytest.mark.parametrize('data_w,user_w,depth', [(8, 2, 8)])
-    def test_axi_stream_fifo_cdc(self, data_w: int, user_w: int, depth: int):
+    @pytest.mark.parametrize('data_w,user_w,depth,low_reset', [
+        (8, 2, 8, False),
+        (8, 2, 8, True),
+    ])
+    def test_axi_stream_fifo_cdc(
+        self,
+        data_w: int,
+        user_w: int,
+        depth: int,
+        low_reset: bool
+    ):
         from hdl_utils.amaranth_utils.axi_stream_fifo import AXIStreamFIFO
 
         core = AXIStreamFIFO.CreateCDC(
@@ -162,9 +171,16 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             # fifo_cls: Elaboratable = AsyncFIFO,
             # fifo_cls: Elaboratable = AsyncFIFOBuffered,
         )
+        if low_reset:
+            from hdl_utils.amaranth_utils.rstn_wrapper import RstnWrapper
+            core = RstnWrapper(core=core, domain="rd_domain")
+            core = RstnWrapper(core=core, domain="wr_domain")
+            pfx = '_rstn'
+        else:
+            pfx = ''
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_fifo_cdc'
-        vcd_file = f'./tb_axi_stream_fifo_cdc_{data_w}_{user_w}_{depth}.vcd'
+        vcd_file = f'./tb_axi_stream_fifo_cdc_{data_w}_{user_w}_{depth}{pfx}.vcd'
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
