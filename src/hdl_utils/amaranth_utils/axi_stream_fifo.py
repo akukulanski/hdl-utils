@@ -62,3 +62,68 @@ class AXIStreamFIFO(Elaboratable):
             w_domain=w_domain,
             **kwargs
         )
+
+
+def parse_args(sys_args=None):
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-dw', '--data-width', type=int, required=True,
+                        help='Data width in bits')
+    parser.add_argument('-uw', '--user-width', type=int, required=True,
+                        help='User width in bits')
+    parser.add_argument('-d', '--fifo-depth', type=int, required=True,
+                        help='FIFO depth')
+    parser.add_argument('--cdc', action='store_true',
+                        help='Fifo with Clock Domain Crossing')
+    parser.add_argument('--low-reset', action='store_true',
+                        help='Active-low reset')
+    parser.add_argument('--rd-domain', type=str,
+                        default='m_axis', help='Read clock domain name')
+    parser.add_argument('--wr-domain', type=str,
+                        default='s_axis', help='Write clock domain name')
+    parser.add_argument('-n', '--name', type=str,
+                        default=None, help='Core name')
+    parser.add_argument('--prefix', type=str,
+                        default='', help='Module names prefix')
+
+    return parser.parse_args(sys_args)
+
+
+def main(sys_args=None):
+    from hdl_utils.amaranth_utils.generate_verilog import generate_verilog
+    args = parse_args(sys_args)
+    if args.cdc:
+        name = args.name or 'axi_stream_fifo_cdc'
+        core = AXIStreamFIFO.CreateCDC(
+            data_w=args.data_width,
+            user_w=args.user_width,
+            depth=args.fifo_depth,
+            r_domain=args.rd_domain,
+            w_domain=args.wr_domain,
+        )
+        if args.low_reset:
+            from hdl_utils.amaranth_utils.rstn_wrapper import RstnWrapper
+            core = RstnWrapper(core=core, domain=args.rd_domain)
+            core = RstnWrapper(core=core, domain=args.wr_domain)
+    else:
+        name = args.name or 'axi_stream_fifo'
+        core = AXIStreamFIFO(
+            data_w=args.data_width,
+            user_w=args.user_width,
+            depth=args.fifo_depth,
+        )
+        if args.low_reset:
+            from hdl_utils.amaranth_utils.rstn_wrapper import RstnWrapper
+            core = RstnWrapper(core=core, domain="sync")
+    ports = core.get_ports()
+    output = generate_verilog(
+        core=core,
+        name=name,
+        ports=ports,
+        prefix=args.prefix
+    )
+    print(output)
+
+
+if __name__ == '__main__':
+    main()
