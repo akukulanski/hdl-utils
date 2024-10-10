@@ -169,6 +169,9 @@ class AXIStreamMaster(AXIStreamBase):
         keep = _as_iter(keep) if keep is not None else [None] * len(data)
         user = _as_iter(user) if user is not None else [None] * len(data)
 
+        assert len(data) == len(keep)
+        assert len(data) == len(user)
+
         if force_sync_clk_edge:
             await RisingEdge(self.clock)
         for d, k, u in zip(data[:-1], keep[:-1], user[:-1]):
@@ -188,6 +191,25 @@ class AXIStreamMaster(AXIStreamBase):
             keep=keep[-1],
             user=user[-1]
         )
+
+    async def write_multiple(
+        self,
+        datas: list[Union[int, Sequence[int]]],
+        keeps: list[Union[int, Sequence[int]]] = None,
+        users: list[Union[int, Sequence[int]]] = None,
+        **kwargs
+    ) -> None:
+        keeps = keeps or [None for _ in range(len(datas))]
+        users = users or [None for _ in range(len(datas))]
+        assert len(datas) == len(keeps)
+        assert len(datas) == len(users)
+        for data, user, keep in zip(datas, keeps, users):
+            await self.write(
+                data=data,
+                keep=keep,
+                user=user,
+                **kwargs
+            )
 
 
 class AXIStreamSlave(AXIStreamBase):
@@ -213,15 +235,16 @@ class AXIStreamSlave(AXIStreamBase):
             await RisingEdge(self.clock)
             while self.bus.tvalid.value.integer == 0:
                 await RisingEdge(self.clock)
-        value = self.bus.tdata.value.integer
-        last = self.bus.tlast.value.integer
+        current_values = self._capture_current_values()
+        last = self.tlast_int()
         self.bus.tready.value = 0
-        return (value, last)
+        return current_values, last
 
     async def read(
         self,
         length: int = None,
         ignore_last: bool = False,
+        all_signals: bool = False,
         burps: bool = False,
         force_sync_clk_edge: bool = True,
     ) -> Sequence[int]:
@@ -233,10 +256,14 @@ class AXIStreamSlave(AXIStreamBase):
         while True:
             while burps and random.getrandbits(1):
                 await RisingEdge(self.clock)
-            value, last = await self._recv_rd_data()
-            data.append(value)
+            current_values, tlast = await self._recv_rd_data()
+            if all_signals:
+                data.append(current_values)
+            else:
+                tdata = current_values[0]
+                data.append(tdata)
             count += 1
-            if (last and not ignore_last) or (count == length):
+            if (tlast and not ignore_last) or (count == length):
                 return data
 
     async def read_multiple(
