@@ -75,8 +75,8 @@ def parse_args(sys_args=None):
                         help='FIFO depth')
     parser.add_argument('--cdc', action='store_true',
                         help='Fifo with Clock Domain Crossing')
-    parser.add_argument('--low-reset', action='store_true',
-                        help='Active-low reset')
+    parser.add_argument('-rstn', '--active-low-reset', action='store_true',
+                        help='Use active low reset (default is active high)')
     parser.add_argument('--rd-domain', type=str,
                         default='m_axis', help='Read clock domain name')
     parser.add_argument('--wr-domain', type=str,
@@ -101,7 +101,7 @@ def main(sys_args=None):
             r_domain=args.rd_domain,
             w_domain=args.wr_domain,
         )
-        if args.low_reset:
+        if args.active_low_reset:
             from hdl_utils.amaranth_utils.rstn_wrapper import RstnWrapper
             core = RstnWrapper(core=core, domain=args.rd_domain)
             core = RstnWrapper(core=core, domain=args.wr_domain)
@@ -112,7 +112,7 @@ def main(sys_args=None):
             user_w=args.user_width,
             depth=args.fifo_depth,
         )
-        if args.low_reset:
+        if args.active_low_reset:
             from hdl_utils.amaranth_utils.rstn_wrapper import RstnWrapper
             core = RstnWrapper(core=core, domain="sync")
     ports = core.get_ports()
