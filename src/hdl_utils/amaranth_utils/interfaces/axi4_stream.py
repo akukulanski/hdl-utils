@@ -89,7 +89,7 @@ def connect_to_null_source(iface: AXI4StreamInterface) -> list[Assign]:
         connections += [iface.tuser.eq(0)]
     if hasattr(iface, 'tkeep'):
         connections += [iface.tkeep.eq(0)]
-    return
+    return connections
 
 
 def connect_to_null_sink(iface: AXI4StreamInterface) -> Assign:
