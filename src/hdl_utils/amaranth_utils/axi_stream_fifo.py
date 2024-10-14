@@ -1,4 +1,4 @@
-from amaranth import Elaboratable, Module
+from amaranth import Elaboratable, Module, ResetSignal
 from amaranth.lib.fifo import SyncFIFOBuffered, AsyncFIFO
 
 from hdl_utils.amaranth_utils.interfaces.axi4_stream import AXI4StreamSignature
@@ -33,12 +33,14 @@ class AXIStreamFIFO(Elaboratable):
 
     def elaborate(self, platform):
         m = Module()
+
+        w_domain = self.fifo._w_domain if hasattr(self.fifo, '_w_domain') else 'sync'
         # Fifo Instance
         m.submodules.fifo_core = fifo = self.fifo
         # Sink
         m.d.comb += fifo.w_data.eq(self.sink.flatten())
         m.d.comb += fifo.w_en.eq(self.sink.accepted())
-        m.d.comb += self.sink.tready.eq(fifo.w_rdy)
+        m.d.comb += self.sink.tready.eq(fifo.w_rdy & ~ResetSignal(w_domain))
         # Source
         m.d.comb += self.source.tvalid.eq(fifo.r_rdy)
         m.d.comb += fifo.r_en.eq(self.source.accepted())
