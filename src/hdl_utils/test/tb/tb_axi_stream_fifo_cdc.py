@@ -20,7 +20,6 @@ P_DEPTH = int(os.environ['P_DEPTH'])
 
 
 class Testbench:
-    clk_period = 10
 
     def __init__(self, dut, period_ns_w, period_ns_r):
         self.dut = dut
@@ -41,7 +40,7 @@ class Testbench:
             assert not hasattr(self.dut, sig_pos), f'2both {sig_pos} and {sig_neg} present'
             return sig_neg
         else:
-            raise AttributeError('Reset signal not found for wr_domain')
+            raise AttributeError(f'Reset signal not found for {domain}')
 
     def reset(self, domain: str):
         signal_name = self.get_reset_signal_name(domain)
