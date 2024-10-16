@@ -28,6 +28,7 @@ class TemplateTestbenchVerilog:
                       test_module: str,
                       parameters: dict = None,
                       vcd_file: str = None,
+                      env: dict = None,
                       extra_args: list = None,
                       includes: list = None,
                       ):
@@ -66,7 +67,7 @@ class TemplateTestbenchVerilog:
             compile_args += extra_args
 
         # Environment variables
-        env = {}
+        env = env or {}
         if parameters:
             # Add P_* env vars to be accesible in testbench
             env.update({
