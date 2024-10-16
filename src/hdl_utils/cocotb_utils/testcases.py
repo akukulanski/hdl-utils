@@ -101,6 +101,7 @@ class TemplateTestbenchAmaranth:
                       core,  # Elaboratable,
                       test_module: str,
                       ports: list,
+                      verilog_sources: list = None,
                       vcd_file: str = None,
                       env: dict = None,
                       # extra_args: list = None,
@@ -112,5 +113,6 @@ class TemplateTestbenchAmaranth:
             amaranth_cocotb_run(
                 core,
                 test_module,
+                verilog_sources=verilog_sources,
                 ports=ports,
                 vcd_file=vcd_file)
