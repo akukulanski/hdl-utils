@@ -188,3 +188,96 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         }
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
+
+    @pytest.mark.parametrize(
+        'DWI,DWO,UWI',
+        [
+            (24, 8, 3),
+            (48, 24, 4),
+        ]
+    )
+    def test_width_converter_down(self, DWI, DWO, UWI):
+        from hdl_utils.amaranth_utils.axi_stream_width_converter import \
+            AXIStreamWidthConverterDown
+
+        core = AXIStreamWidthConverterDown(
+            data_w_i=DWI,
+            data_w_o=DWO,
+            user_w_i=UWI,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_stream_width_converter_down'
+        vcd_file = f'./tb_axi_stream_width_converter_down_{DWI}_{DWO}_{UWI}.vcd'
+        env = {
+            'P_DWI': str(DWI),
+            'P_DWO': str(DWO),
+            'P_UWI': str(UWI),
+        }
+        self.run_testbench(core, test_module, ports,
+                           vcd_file=vcd_file, env=env)
+
+    @pytest.mark.parametrize(
+        'DWI,DWO,UWI',
+        [
+            (16, 8, 0),  # EXPECT FAIL: zero user width
+            (24, 48, 4),  # EXPECT FAIL: 24 <= 48
+            (40, 24, 4),  # EXPECT FAIL: 40 % 24 == 16
+        ]
+    )
+    def test_width_converter_down_bad(self, DWI, DWO, UWI):
+        from hdl_utils.amaranth_utils.axi_stream_width_converter import \
+            AXIStreamWidthConverterDown
+
+        with pytest.raises(AssertionError):
+            AXIStreamWidthConverterDown(
+                data_w_i=DWI,
+                data_w_o=DWO,
+                user_w_i=UWI,
+            )
+
+    @pytest.mark.parametrize(
+        'DWI,DWO,UWI',
+        [
+            (8, 24, 1),
+            (24, 48, 2),
+        ]
+    )
+    def test_width_converter_up(self, DWI, DWO, UWI):
+        from hdl_utils.amaranth_utils.axi_stream_width_converter import \
+            AXIStreamWidthConverterUp
+
+        core = AXIStreamWidthConverterUp(
+            data_w_i=DWI,
+            data_w_o=DWO,
+            user_w_i=UWI,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_stream_width_converter_up'
+        vcd_file = f'./tb_axi_stream_width_converter_up_{DWI}_{DWO}_{UWI}.vcd'
+        env = {
+            'P_DWI': str(DWI),
+            'P_DWO': str(DWO),
+            'P_UWI': str(UWI),
+        }
+
+        self.run_testbench(core, test_module, ports,
+                           vcd_file=vcd_file, env=env)
+
+    @pytest.mark.parametrize(
+        'DWI,DWO,UWI',
+        [
+            (8, 16, 0),  # EXPECT FAIL: zero user width
+            (48, 24, 2),  # EXPECT FAIL: 48 >= 24
+            (24, 40, 2),  # EXPECT FAIL: 40 % 24 == 16
+        ]
+    )
+    def test_width_converter_up_bad(self, DWI, DWO, UWI):
+        from hdl_utils.amaranth_utils.axi_stream_width_converter import \
+            AXIStreamWidthConverterUp
+
+        with pytest.raises(AssertionError):
+            AXIStreamWidthConverterUp(
+                data_w_i=DWI,
+                data_w_o=DWO,
+                user_w_i=UWI,
+            )
