@@ -94,9 +94,13 @@ class AXI4LiteInterface(wiring.PureInterface):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # NO! This duplicates the signals everywhere.
         # Overload with lowercase version of signals.
-        for s in self.signature.members.keys():
-            setattr(self, s.lower(), getattr(self, s))
+        # for s in self.signature.members.keys():
+        #     setattr(self, s.lower(), getattr(self, s))
+
+    def __getattr__(self, key: str):
+        return getattr(self, key.upper())
 
     @property
     def data_w(self):
