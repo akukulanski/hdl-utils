@@ -57,13 +57,10 @@ class AXIStreamWidthConverterDown(Elaboratable):
         is_last_chunk = Signal()
 
         m.d.comb += [
-            # assign is_last_subchunk = (counter_r == SCALING_FACTOR - 1) ? 1'b1 : 1'b0;
             is_last_subchunk.eq(beats_remaining == 0),
-            # assign only_null_bytes_remaining = ~ (|(keep_buffer_r[DWI - 1 : DWO]));
             only_null_bytes_remaining.eq(
                 ~ (buffer_tkeep[keep_w_o:]).any()
             ),
-            # assign is_last_chunk = (is_last_subchunk | only_null_bytes_remaining) & last_buffer_r;
             is_last_chunk.eq(
                 buffer_tlast & (is_last_subchunk | only_null_bytes_remaining)
             ),
@@ -190,9 +187,7 @@ class AXIStreamWidthConverterUp(Elaboratable):
         is_last_subchunk = Signal()
 
         m.d.comb += [
-            # assign is_last_subchunk = (counter_r == (SCALING_FACTOR - 1)) ? 1'b1 : 1'b0;
             is_last_subchunk.eq(beats_remaining == 0),
-            #
             self.source.tdata.eq(buffer_tdata),
             self.source.tuser.eq(buffer_tuser),
             self.source.tkeep.eq(buffer_tkeep),
@@ -206,16 +201,6 @@ class AXIStreamWidthConverterUp(Elaboratable):
                     self.source.tvalid.eq(0),
                 ]
                 with m.If(self.sink.accepted()):
-                    # data_buffer_r <= {s_axi_tdata, data_buffer_r[DWO_BITS - 1:DWI_BITS]};
-                    # user_buffer_r <= {s_axi_tuser, user_buffer_r[UWO-1:UWI]};
-                    # keep_buffer_r <= {s_axi_tkeep, keep_buffer_r[DWO-1:DWI]};
-                    # last_buffer_r <= s_axi_tlast;
-                    # counter_r <= counter_r + 'd1;
-                    # if (is_last_subchunk) begin
-                    #     state_r <= ST_WAITING_FOR_SLAVE;
-                    # end else if (s_axi_tlast) begin
-                    #     state_r <= ST_PADDING;
-                    # end
                     m.d.sync += [
                         buffer_tdata.eq(Cat(buffer_tdata[data_w_i:],
                                             self.sink.tdata)),
@@ -236,13 +221,6 @@ class AXIStreamWidthConverterUp(Elaboratable):
                     self.sink.tready.eq(0),
                     self.source.tvalid.eq(0),
                 ]
-                # data_buffer_r <= {{DWI_BITS{1'b0}}, data_buffer_r[DWO_BITS - 1:DWI_BITS]};
-                # user_buffer_r <= {{UWI{1'b0}}, user_buffer_r[UWO-1:UWI]};
-                # keep_buffer_r <= {{DWI{1'b0}}, keep_buffer_r[DWO-1:DWI]};
-                # counter_r <= counter_r + 'd1;
-                # if (is_last_subchunk) begin
-                #     state_r <= ST_WAITING_FOR_SLAVE;
-                # end
                 m.d.sync += [
                     buffer_tdata.eq(Cat(buffer_tdata[data_w_i:],
                                         Const(0, shape=data_w_i))),
