@@ -1,4 +1,4 @@
-from amaranth import Elaboratable, Module, Signal, Cat, Const  # , ResetSignal
+from amaranth import Elaboratable, Module, Signal, Cat, Const, ResetSignal
 
 from hdl_utils.amaranth_utils.interfaces.axi4_stream import AXI4StreamSignature
 
@@ -66,10 +66,13 @@ class AXIStreamWidthConverterDown(Elaboratable):
             ),
         ]
 
+        sink_tready = Signal()
+        m.d.comb += self.sink.tready.eq(sink_tready & ~ResetSignal("sync"))
+
         with m.FSM():
             with m.State("IDLE"):
                 m.d.comb += [
-                    self.sink.tready.eq(1),
+                    sink_tready.eq(1),
                     self.source.tvalid.eq(0),
                     self.source.tlast.eq(0),
                     self.source.tdata.eq(0),
@@ -88,8 +91,7 @@ class AXIStreamWidthConverterDown(Elaboratable):
 
             with m.State("CONVERTING"):
                 m.d.comb += [
-                    self.sink.tready.eq(self.source.accepted() &
-                                        is_last_subchunk),
+                    sink_tready.eq(self.source.accepted() & is_last_subchunk),
                     self.source.tvalid.eq(1),
                     self.source.tlast.eq(is_last_chunk),
                     self.source.tdata.eq(buffer_tdata[0:data_w_o]),
@@ -194,10 +196,13 @@ class AXIStreamWidthConverterUp(Elaboratable):
             self.source.tlast.eq(buffer_tlast),
         ]
 
+        sink_tready = Signal()
+        m.d.comb += self.sink.tready.eq(sink_tready & ~ResetSignal("sync"))
+
         with m.FSM():
             with m.State("CONVERTING"):
                 m.d.comb += [
-                    self.sink.tready.eq(1),
+                    sink_tready.eq(1),
                     self.source.tvalid.eq(0),
                 ]
                 with m.If(self.sink.accepted()):
@@ -218,7 +223,7 @@ class AXIStreamWidthConverterUp(Elaboratable):
 
             with m.State("PADDING"):
                 m.d.comb += [
-                    self.sink.tready.eq(0),
+                    sink_tready.eq(0),
                     self.source.tvalid.eq(0),
                 ]
                 m.d.sync += [
@@ -235,7 +240,7 @@ class AXIStreamWidthConverterUp(Elaboratable):
 
             with m.State("WAITING_FOR_SLAVE"):
                 m.d.comb += [
-                    self.sink.tready.eq(self.source.accepted()),
+                    sink_tready.eq(self.source.accepted()),
                     self.source.tvalid.eq(1),
                 ]
                 with m.If(self.source.accepted()):
