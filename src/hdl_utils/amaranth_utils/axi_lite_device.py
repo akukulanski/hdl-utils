@@ -4,6 +4,13 @@ from hdl_utils.amaranth_utils.interfaces.axi_lite import AXI4LiteSignature
 
 class AxiLiteDevice(Elaboratable):
     def __init__(self, addr_w, data_w, registers_map, domain='sync'):
+        # Preprocess registers_map for compatibility:
+        _registers_map = []
+        for r in registers_map:
+            if len(r) == 4:
+                r = [*r[:3], 0, r[3]]
+            _registers_map.append(r)
+        registers_map = _registers_map
         self.addr_w = addr_w
         self.data_w = data_w
         self.registers_map = registers_map
@@ -15,12 +22,12 @@ class AxiLiteDevice(Elaboratable):
         )
         # Raw registers
         self.registers = {
-            r_addr: Signal(data_w, name=f'reg_0x{r_addr:08x}')
-            for _, r_dir, r_addr, r_fields in registers_map
+            r_addr: Signal(data_w, name=f'reg_0x{r_addr:08x}', init=r_default)
+            for _, r_dir, r_addr, r_default, r_fields in registers_map
         }
         # Register fields
         self.reg_fields = {}
-        for r_name, r_dir, r_addr, r_fields in registers_map:
+        for r_name, r_dir, r_addr, r_default, r_fields in registers_map:
             for f_name, f_size, f_offset in r_fields:
                 self.reg_fields[f_name] = Signal(f_size, name=f_name)
 
@@ -36,7 +43,7 @@ class AxiLiteDevice(Elaboratable):
         comb = m.d.comb
 
         # Registers
-        for _, r_dir, addr, r_fields in self.registers_map:
+        for _, r_dir, addr, r_default, r_fields in self.registers_map:
             for name, size, offset in r_fields:
                 if r_dir == 'rw':
                     comb += self.reg_fields[name].eq(
@@ -57,12 +64,12 @@ class AxiLiteDevice(Elaboratable):
         with m.If(self.axi_lite.w_accepted()):
             sync += wr_data.eq(self.axi_lite.wdata)
 
-        for _, r_dir, r_addr, r_fields in self.registers_map:
+        for _, r_dir, r_addr, r_default, r_fields in self.registers_map:
             if r_dir == 'rw':
                 with m.If((wr_addr == r_addr) & (we == 1)):
                     sync += self.registers[r_addr].eq(wr_data)
 
-        for _, r_dir, r_addr, r_fields in self.registers_map:
+        for _, r_dir, r_addr, r_default, r_fields in self.registers_map:
             with m.If(
                 self.axi_lite.ar_accepted() & (self.axi_lite.araddr == r_addr)
             ):
