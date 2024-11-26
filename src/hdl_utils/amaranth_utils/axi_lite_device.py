@@ -31,6 +31,11 @@ class AxiLiteDevice(Elaboratable):
             for f_name, f_size, f_offset in r_fields:
                 self.reg_fields[f_name] = Signal(f_size, name=f_name)
 
+        # Expose in case it's useful to detect register writes
+        self.we = Signal()
+        self.wr_addr = Signal(self.addr_w)
+        self.wr_data = Signal(self.data_w)
+
     def get_ports(self):
         ports = []
         ports += self.axi_lite.extract_signals()
@@ -54,9 +59,9 @@ class AxiLiteDevice(Elaboratable):
                         self.reg_fields[name]
                     )
 
-        we = Signal()
-        wr_addr = Signal(self.addr_w)
-        wr_data = Signal(self.data_w)
+        we = self.we
+        wr_addr = self.wr_addr
+        wr_data = self.wr_data
 
         with m.If(self.axi_lite.aw_accepted()):
             sync += wr_addr.eq(self.axi_lite.awaddr)
