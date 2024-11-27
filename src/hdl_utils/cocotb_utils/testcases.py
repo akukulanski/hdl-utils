@@ -1,5 +1,5 @@
 from cocotb_test.simulator import run as cocotb_run
-from amaranth_cocotb import run as amaranth_cocotb_run
+from amaranth_cocotb import Icarus_g2005, run as amaranth_cocotb_run
 import os
 import tempfile
 
@@ -31,6 +31,7 @@ class TemplateTestbenchVerilog:
                       env: dict = None,
                       extra_args: list = None,
                       includes: list = None,
+                      exported_from_amaranth: bool = False,
                       ):
 
         """
@@ -84,16 +85,19 @@ class TemplateTestbenchVerilog:
                     f.write(verilog_waveforms.format(vcd_file, top_level))
                 verilog_sources = [*verilog_sources, verilog_dump_file]  # copy!
 
+            kwargs = dict(
+                verilog_sources=verilog_sources,
+                toplevel=top_level,
+                module=test_module,
+                compile_args=compile_args,
+                sim_build=d,
+                includes=includes,
+            )
             with set_env(**env):
-                cocotb_run(
-                    simulator='icarus',
-                    verilog_sources=verilog_sources,
-                    toplevel=top_level,
-                    module=test_module,
-                    compile_args=compile_args,
-                    sim_build=d,
-                    includes=includes,
-                )
+                if exported_from_amaranth:
+                    Icarus_g2005(**kwargs).run()
+                else:
+                    cocotb_run(simulator='icarus', **kwargs)
 
 
 class TemplateTestbenchAmaranth:

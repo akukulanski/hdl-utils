@@ -9,8 +9,10 @@ def generate_verilog(core: Elaboratable,
                      name: str = None,
                      ports: list = None,
                      prefix: str = '',
+                     remove_duplicate_underscores: bool = True,
                      remove_comments: bool = True,
                      remove_empty_lines: bool = True,
+                     timescale: str = '`timescale 1ns/1ps',
                      ):
     """
     Generate Verilog of a core described by an Elaboratable object.
@@ -40,10 +42,14 @@ def generate_verilog(core: Elaboratable,
     fragment = Fragment.get(core, None)
     output = verilog.convert(fragment, name=name, ports=ports)
 
+    if timescale:
+        output = f'{timescale}\n\n{output}'
+
     # Reformat the verilog output
     output = re.sub(r'\*\)', '*/', re.sub(r'\(\*', '/*', output))
     # Fix duplicate underscores
-    output = output.replace('__', '_')
+    if remove_duplicate_underscores:
+        output = output.replace('__', '_')
     # Remove comments
     if remove_comments:
         regex = r'/\* .* \*/\s*'
