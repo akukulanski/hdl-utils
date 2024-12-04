@@ -281,3 +281,22 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
                 data_w_o=DWO,
                 user_w_i=UWI,
             )
+
+    @pytest.mark.parametrize('addr_w,data_w,user_w', [(32, 128, 0)])
+    def test_axi_stream_to_full(self, addr_w, data_w, user_w):
+        from hdl_utils.amaranth_utils.axi_stream_to_full import AxiStreamToFull
+        core = AxiStreamToFull(
+            addr_w=addr_w,
+            data_w=data_w,
+            user_w=user_w,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_stream_to_full'
+        vcd_file = './tb_axi_stream_to_full.py.vcd'
+        env = {
+            'P_ADDR_W': str(addr_w),
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+        }
+        self.run_testbench(core, test_module, ports,
+                           vcd_file=vcd_file, env=env)
