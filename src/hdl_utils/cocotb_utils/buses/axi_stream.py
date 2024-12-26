@@ -203,7 +203,7 @@ class AXIStreamMaster(AXIStreamBase):
         users = users or [None for _ in range(len(datas))]
         assert len(datas) == len(keeps)
         assert len(datas) == len(users)
-        for data, user, keep in zip(datas, keeps, users):
+        for data, user, keep in zip(datas, users, keeps):
             await self.write(
                 data=data,
                 keep=keep,
