@@ -99,12 +99,10 @@ class AXI4Slave(BusDriver):
             self.bus.BRESP.value = 0
             self.bus.WREADY.value = 0
             self.bus.BVALID.value = 0
-            self.bus.AWREADY.value = 0
-            if not self.bus.AWVALID.value:
-                await RisingEdge(self.bus.AWVALID)
             self.bus.AWREADY.value = 1
-
             await RisingEdge(self.clock)
+            while not self.bus.AWVALID.value:
+                await RisingEdge(self.clock)
             _awaddr = int(self.bus.AWADDR)
             _awlen = int(self.bus.AWLEN)
             _awsize = int(self.bus.AWSIZE)
@@ -116,10 +114,10 @@ class AXI4Slave(BusDriver):
             burst_count = burst_length
 
             for b in range(burst_length):
-                while not self.bus.WVALID.value:
-                    await RisingEdge(self.bus.WVALID)
                 self.bus.WREADY.value = 1
                 await RisingEdge(self.clock)
+                while not self.bus.WVALID.value:
+                    await RisingEdge(self.clock)
                 word = self.bus.WDATA.value
                 word.big_endian = self.big_endian
                 _burst_diff = burst_length - burst_count
