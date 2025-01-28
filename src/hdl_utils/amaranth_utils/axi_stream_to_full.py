@@ -116,7 +116,7 @@ class AxiStreamToFull(Elaboratable):
             # self.m_axi.WLAST.eq(...),
             # self.m_axi.WUSER.eq(0),
             # self.m_axi.WVALID.eq(...),
-            self.m_axi.BREADY.eq(self.m_axi.BVALID),  # ignored, accept all transactions
+            # self.m_axi.BREADY.eq(self.m_axi.BVALID),  # ignored, accept all transactions
             # self.m_axi.ARID.eq(0),
             self.m_axi.ARADDR.eq(self.rd_addr),
             self.m_axi.ARLEN.eq(self.rd_burst),
@@ -171,6 +171,7 @@ class AxiStreamToFull(Elaboratable):
                     self.m_axi.WLAST.eq(0),
                     self.s_axis.tready.eq(0),
                     self.m_axi.AWVALID.eq(self.wr_valid),
+                    self.m_axi.BREADY.eq(0),
                     self.wr_ready.eq(self.m_axi.AWREADY),
                     self.wr_idle.eq(1),
                 ]
@@ -188,6 +189,7 @@ class AxiStreamToFull(Elaboratable):
                     self.m_axi.WLAST.eq(self.m_axi.WVALID & wr_last_of_burst),
                     self.s_axis.tready.eq(self.m_axi.WREADY),
                     self.m_axi.AWVALID.eq(0),
+                    self.m_axi.BREADY.eq(0),
                     self.wr_ready.eq(0),
                     self.wr_idle.eq(0),
                 ]
@@ -204,10 +206,13 @@ class AxiStreamToFull(Elaboratable):
                     self.m_axi.WLAST.eq(self.m_axi.WVALID & wr_last_of_burst),
                     self.s_axis.tready.eq(0),
                     self.m_axi.AWVALID.eq(0),
+                    self.m_axi.BREADY.eq(0),
                     self.wr_ready.eq(0),
+                    self.wr_idle.eq(0),
                 ]
                 with m.If(self.m_axi.w_accepted() & wr_last_of_burst):
-                    m.next = "WR_WAITING_ADDR" # shouldnt it be WR_END? Ignorning BRESP
+                    m.next = "WR_WAIT_WRITE_RESPONSE"
+
             with m.State("WR_WAIT_WRITE_RESPONSE"):
                 m.d.comb += [
                     self.m_axi.WDATA.eq(0),
@@ -216,6 +221,7 @@ class AxiStreamToFull(Elaboratable):
                     self.m_axi.WLAST.eq(0),
                     self.s_axis.tready.eq(0),
                     self.m_axi.AWVALID.eq(0),
+                    self.m_axi.BREADY.eq(1),
                     self.wr_ready.eq(0),
                     self.wr_idle.eq(0),
                 ]
