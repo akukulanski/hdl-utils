@@ -50,14 +50,16 @@ class AxiStreamToFull(Elaboratable):
         self.wr_ready = Signal()  # Out: ready for writing new burst
         self.rd_valid = Signal()  # In: start reading new burst
         self.rd_ready = Signal()  # Out: ready for reading new burst
+        self.wr_idle = Signal()  # Out: Idle, available for new burst
+        self.rd_idle = Signal()  # Out: Idle, available for new burst
 
     def get_ports(self):
         return [
             *self.s_axis.extract_signals(),
             *self.m_axis.extract_signals(),
             *self.m_axi.extract_signals(),
-            self.wr_valid, self.wr_ready,
-            self.rd_valid, self.rd_ready,
+            self.wr_valid, self.wr_ready, self.wr_idle,
+            self.rd_valid, self.rd_ready, self.rd_idle,
             self.wr_addr,
             self.rd_addr,
             self.wr_burst,
@@ -170,6 +172,7 @@ class AxiStreamToFull(Elaboratable):
                     self.s_axis.tready.eq(0),
                     self.m_axi.AWVALID.eq(self.wr_valid),
                     self.wr_ready.eq(self.m_axi.AWREADY),
+                    self.wr_idle.eq(1),
                 ]
                 with m.If(self.m_axi.aw_accepted()):
                     m.next = "WR_DATA"
@@ -186,6 +189,7 @@ class AxiStreamToFull(Elaboratable):
                     self.s_axis.tready.eq(self.m_axi.WREADY),
                     self.m_axi.AWVALID.eq(0),
                     self.wr_ready.eq(0),
+                    self.wr_idle.eq(0),
                 ]
                 with m.If(self.m_axi.w_accepted() & wr_last_of_burst):
                     m.next = "WR_WAIT_WRITE_RESPONSE"
@@ -213,6 +217,7 @@ class AxiStreamToFull(Elaboratable):
                     self.s_axis.tready.eq(0),
                     self.m_axi.AWVALID.eq(0),
                     self.wr_ready.eq(0),
+                    self.wr_idle.eq(0),
                 ]
                 with m.If(self.m_axi.b_accepted()):
                     m.next = "WR_WAITING_ADDR"
