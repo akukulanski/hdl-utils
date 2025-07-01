@@ -300,3 +300,41 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         }
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
+
+    @pytest.mark.parametrize(
+        'data_w,user_w,no_tkeep,n_split',
+        [
+            (8, 1, True, 2),
+            (8, 1, True, 3),
+            (8, 1, True, 1),
+            (16, 1, False, 2),
+            (16, 2, False, 2),
+        ]
+    )
+    def test_axis_splitter(
+        self,
+        data_w: int,
+        user_w: int,
+        no_tkeep: bool,
+        n_split: int,
+    ):
+        from hdl_utils.amaranth_utils.axi_stream_splitter import \
+            AXIStreamSplitter
+
+        core = AXIStreamSplitter(
+            data_w=data_w,
+            user_w=user_w,
+            no_tkeep=no_tkeep,
+            n_split=n_split,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_stream_splitter'
+        vcd_file = f'./tb_axi_stream_splitter_{data_w}_{user_w}_{no_tkeep}_{n_split}.vcd'
+        env = {
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+            'P_NO_TKEEP': str(int(no_tkeep)),
+            'P_N_SPLIT': str(n_split),
+        }
+        self.run_testbench(core, test_module, ports,
+                           vcd_file=vcd_file, env=env)
