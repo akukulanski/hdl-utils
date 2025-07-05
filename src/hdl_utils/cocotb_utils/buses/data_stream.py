@@ -1,45 +1,103 @@
-from typing import Any, Sequence, Tuple, Union
-import random
-
+import copy
 from cocotb.triggers import Lock, RisingEdge
 from cocotb.handle import SimHandleBase
-from cocotb_bus.drivers import BusDriver
+import random
+from typing import Sequence, Tuple, Union
+
+from .bus import Bus, SignalInfo, DIR_OUTPUT, DIR_INPUT
 
 
-__all__ = ['DataStreamMaster', 'DataStreamSlave']
+__all__ = [
+    'DataStreamMasterBus',
+    'DataStreamSlaveBus',
+    'DataStreamMonitorMixin',
+    'DataStreamBase',
+    'DataStreamMasterDriver',
+    'DataStreamSlaveDriver',
+    'DataStreamMaster',
+    'DataStreamSlave',
+]
 
 
-class DataStreamBase(BusDriver):
-    _signals = [
-        "valid", "ready", "last", "data"]
+class DataStreamMasterBus(Bus):
 
-    _optional_signals = []
+    layout = [
+        SignalInfo(name='valid', direction=DIR_OUTPUT, fixed_width=1, optional=False),
+        SignalInfo(name='ready', direction=DIR_INPUT, fixed_width=1, optional=False),
+        SignalInfo(name='data', direction=DIR_OUTPUT, fixed_width=None, optional=False),
+        SignalInfo(name='last', direction=DIR_OUTPUT, fixed_width=1, optional=True),
+    ]
 
-    async def run_monitor(self):
-        self.monitor = []
-        current_stream = []
+
+class DataStreamSlaveBus(DataStreamMasterBus.flipped_bus()):
+    pass
+
+
+class DataStreamMonitorMixin:
+
+    def __init__(self):
+        self._data_monitor = []
+        self._current_data_stream = []
+
+    async def run_data_monitor(self):
+        self._data_monitor.clear()
+        self._current_data_stream.clear()
         while True:
             await RisingEdge(self.clock)
-            if self.bus.valid.value.integer and self.bus.ready.value.integer:
-                current_stream.append(self.bus.data.value.integer)
+            if self.accepted():
+                self._current_data_stream.append(self.bus.data.value.integer)
                 if self.bus.last.value.integer:
-                    self.monitor.append(current_stream)
-                    current_stream = []
+                    self._data_monitor.append(self._current_data_stream)
+                    self._current_data_stream = []
+
+    def get_current_data_stream(self):
+        return copy.deepcopy(self._current_data_stream)
+
+    def get_data_streams_from_monitor(self):
+        data_streams = self._data_monitor
+        current_data_stream = self.get_current_data_stream()
+        if len(current_data_stream):
+            data_streams = [*data_streams, current_data_stream]
+        data_streams = copy.deepcopy(data_streams)
+        return data_streams
+
+    async def run_monitor(self):
+        await self.run_data_monitor()
+
+    @property
+    def monitor(self) -> list:
+        return self.get_data_streams_from_monitor()
 
 
-class DataStreamMaster(DataStreamBase):
-    """DataStreamMaster
+class DataStreamBase:
+
+    def __init__(self, entity: SimHandleBase, name: str, clock: SimHandleBase):
+        self.entity = entity
+        self.name = name
+        self.clock = clock
+
+    def accepted(self):
+        return bool(self.bus.valid.value.integer and
+                    self.bus.ready.value.integer)
+
+    def data_int(self):
+        return self.bus.data.value.integer
+
+    def last_int(self):
+        if hasattr(self.bus, 'last'):
+            return self.bus.last.value.integer
+        return None
+
+
+class DataStreamMasterDriver(DataStreamBase, DataStreamMonitorMixin):
+    """DataStreamMasterDriver
     """
 
-    def __init__(self, entity: SimHandleBase, name: str, clock: SimHandleBase,
-                 **kwargs: Any):
-        DataStreamBase.__init__(self, entity, name, clock, **kwargs)
-
-        # Drive some sensible defaults (setimmediatevalue to avoid x asserts)
-        self.bus.valid.setimmediatevalue(0)
-        self.bus.last.setimmediatevalue(0)
-        self.bus.data.setimmediatevalue(0)
-
+    def __init__(self, entity: SimHandleBase, name: str, clock: SimHandleBase):
+        DataStreamBase.__init__(self, entity, name, clock)
+        DataStreamMonitorMixin.__init__(self)
+        self.bus = DataStreamMasterBus(entity, name, clock)
+        self.bus.init_signals()
         # Mutex for each channel to prevent contention
         self.wr_busy = Lock(name + "_wbusy")
 
@@ -73,17 +131,15 @@ class DataStreamMaster(DataStreamBase):
         await self._send_write_data(data=data[-1], last=1)
 
 
-class DataStreamSlave(DataStreamBase):
-    """DataStreamSlave
+class DataStreamSlaveDriver(DataStreamBase, DataStreamMonitorMixin):
+    """DataStreamSlaveDriver
     """
 
-    def __init__(self, entity: SimHandleBase, name: str, clock: SimHandleBase,
-                 **kwargs: Any):
-        DataStreamBase.__init__(self, entity, name, clock, **kwargs)
-
-        # Drive some sensible defaults (setimmediatevalue to avoid x asserts)
-        self.bus.ready.setimmediatevalue(0)
-
+    def __init__(self, entity: SimHandleBase, name: str, clock: SimHandleBase):
+        DataStreamBase.__init__(self, entity, name, clock)
+        DataStreamMonitorMixin.__init__(self)
+        self.bus = DataStreamSlaveBus(entity, name, clock)
+        self.bus.init_signals()
         # Mutex for each channel to prevent contention
         self.rd_busy = Lock(name + "_rbusy")
 
@@ -114,3 +170,8 @@ class DataStreamSlave(DataStreamBase):
             count += 1
             if (last and not ignore_last) or (count == length):
                 return data
+
+
+# Backward compatibility
+DataStreamMaster = DataStreamMasterDriver
+DataStreamSlave = DataStreamSlaveDriver

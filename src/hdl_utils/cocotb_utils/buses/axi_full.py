@@ -7,6 +7,14 @@ from cocotb.triggers import RisingEdge
 from .bus import Bus, SignalInfo, DIR_OUTPUT, DIR_INPUT
 
 
+__all__ = [
+    'AXIProtocolError',
+    'AXI4SlaveBus',
+    'AXI4SlaveDriver',
+    'AXI4MasterDriver',
+    'AXI4Slave',
+]
+
 class AXIProtocolError(Exception):
     pass
 
@@ -57,7 +65,11 @@ class AXI4SlaveBus(Bus):
         SignalInfo(name='BRESP', direction=DIR_OUTPUT, fixed_width=None, optional=True),
         SignalInfo(name='BID', direction=DIR_OUTPUT, fixed_width=None, optional=True),
     ]
-from cocotb_bus.drivers.amba import AXI4LiteMaster
+
+
+class AXI4MasterBus(AXI4SlaveBus.flipped_bus()):
+    pass
+
 
 class AXI4SlaveDriver:
 
@@ -78,22 +90,14 @@ class AXI4SlaveDriver:
         self.baseaddr = baseaddr
         self._memory = memory
         self.bus = AXI4SlaveBus(dut, name, clock)
+        self.bus.init_signals()
 
         if run_drivers:
             self.run_drivers()
 
-    def _init_signals(self):
-        for signal_info in AXI4SlaveBus.layout:
-            if signal_info.direction == DIR_OUTPUT:
-                signal = getattr(self.bus, signal_info.name, None)
-                if signal is not None:
-                    # signal.setimmediatevalue(signal_info.default_value)
-                    signal.value = signal_info.default_value
-
     def run_drivers(self):
-        self._init_signals()
-        cocotb.fork(self._read_data())
-        cocotb.fork(self._write_data())
+        cocotb.start_soon(self._read_data())
+        cocotb.start_soon(self._write_data())
 
     def _size_to_bytes_in_beat(self, AxSIZE):
         if AxSIZE <= 7:
@@ -190,6 +194,21 @@ class AXI4SlaveDriver:
             self.bus.RVALID.value = 0
             self.bus.RLAST.value = 0
             self.bus.RDATA.value = 0
+
+
+class AXI4MasterDriver:
+
+    def __init__(
+        self,
+        dut: SimHandleBase,
+        name,
+        clock: SimHandleBase,
+    ):
+        self.dut = dut
+        self.name = name
+        self.clock = clock
+        self.bus = AXI4MasterBus(dut, name, clock)
+        self.bus.init_signals()
 
 
 # Backward compatibility

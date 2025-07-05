@@ -13,10 +13,8 @@ class Testbench:
 
     def __init__(self, dut):
         self.dut = dut
-        self.master = DataStreamMaster(entity=dut, name='sink_',
-                                       clock=dut.clk)
-        self.slave = DataStreamSlave(entity=dut, name='source_',
-                                     clock=dut.clk)
+        self.master = DataStreamMaster(entity=dut, name='sink_', clock=dut.clk)
+        self.slave = DataStreamSlave(entity=dut, name='source_', clock=dut.clk)
 
     async def init_test(self):
         start_soon(Clock(self.dut.clk, self.clk_period, units='ns').start())

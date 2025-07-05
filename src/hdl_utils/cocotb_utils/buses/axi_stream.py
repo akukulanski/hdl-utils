@@ -1,13 +1,19 @@
-from typing import Any, Sequence, Tuple, Union
-import random
-
-from cocotb.triggers import Lock, RisingEdge
 from cocotb.handle import SimHandleBase
-from cocotb_bus.drivers import BusDriver
+from cocotb.triggers import Lock, RisingEdge
+import copy
+import random
+from typing import Sequence, Tuple, Union
+
+from .bus import Bus, SignalInfo, DIR_OUTPUT, DIR_INPUT
 
 
 __all__ = [
+    'AXI4StreamMasterBus',
+    'AXI4StreamSlaveBus',
+    'AXIStreamMonitorMixin',
     'AXIStreamBase',
+    'AXIStreamMasterDriver',
+    'AXIStreamSlaveDriver',
     'AXIStreamMaster',
     'AXIStreamSlave',
     'extract_capture_data',
@@ -28,19 +34,101 @@ def extract_capture_keep(capture):
     return [k for d, u, k in capture]
 
 
-class AXIStreamBase(BusDriver):
-    _signals = [
-        "tvalid", "tready", "tlast", "tdata"
+class AXI4StreamMasterBus(Bus):
+
+    layout = [
+        SignalInfo(name='tvalid', direction=DIR_OUTPUT, fixed_width=1, optional=False),
+        SignalInfo(name='tready', direction=DIR_INPUT, fixed_width=1, optional=False),
+        SignalInfo(name='tdata', direction=DIR_OUTPUT, fixed_width=None, optional=False),
+        SignalInfo(name='tlast', direction=DIR_OUTPUT, fixed_width=1, optional=True),
+        SignalInfo(name='tuser', direction=DIR_OUTPUT, fixed_width=None, optional=True),
+        SignalInfo(name='tkeep', direction=DIR_OUTPUT, fixed_width=None, optional=True),
     ]
 
-    _optional_signals = [
-        "tuser", "tkeep"
-    ]
 
-    def __init__(self, *args, **kwargs):
-        self.monitor = []
-        self.current_stream = []
-        super().__init__(*args, **kwargs)
+class AXI4StreamSlaveBus(AXI4StreamMasterBus.flipped_bus()):
+    pass
+
+
+class AXIStreamMonitorMixin:
+
+    def __init__(self):
+        self._data_monitor = []
+        self._current_data_stream = []
+        self._full_monitor_streams = []
+        self._full_monitor_current_stream = []
+
+
+    async def run_full_monitor(self):
+        """Monitor that registers tdata, tuser and tkeep.
+        """
+        self._full_monitor_streams.clear()
+        self._full_monitor_current_stream.clear()
+        while True:
+            await RisingEdge(self.clock)
+            if self.accepted():
+                self._full_monitor_current_stream.append(self._capture_current_values())
+                if self.bus.tlast.value.integer:
+                    self._full_monitor_streams.append(self._full_monitor_current_stream)
+                    self._full_monitor_current_stream = []
+
+    def get_full_monitor_current_stream(self):
+        return copy.deepcopy(self._full_monitor_current_stream)
+
+    def get_full_monitor_streams(self):
+        streams = self._full_monitor_streams
+        current_stream = self.get_full_monitor_current_stream()
+        if len(current_stream):
+            streams = [*streams, current_stream]
+        streams = copy.deepcopy(streams)
+        return streams
+
+    # Method names backward compatibility
+    def get_monitor(self):
+        return self.get_full_monitor_streams()
+
+    def get_current_stream(self):
+        return self.get_full_monitor_current_stream()
+
+    @property
+    def monitor(self):
+        return self.get_full_monitor_streams()
+
+    async def run_monitor(self):
+        await self.run_full_monitor()
+
+    # Data monitor
+    async def run_data_monitor(self):
+        """Monitor that registers tdata only (no tuser, no tkeep)
+        """
+        self._data_monitor.clear()
+        self._current_data_stream.clear()
+        while True:
+            await RisingEdge(self.clock)
+            if self.accepted():
+                self._current_data_stream.append(self.tdata_int())
+                if self.bus.tlast.value.integer:
+                    self._data_monitor.append(self._current_data_stream)
+                    self._current_data_stream = []
+
+    def get_current_data_stream(self):
+        return copy.deepcopy(self._current_data_stream)
+
+    def get_data_streams_from_monitor(self):
+        data_streams = self._data_monitor
+        current_data_stream = self.get_current_data_stream()
+        if len(current_data_stream):
+            data_streams = [*data_streams, current_data_stream]
+        data_streams = copy.deepcopy(data_streams)
+        return data_streams
+
+
+class AXIStreamBase:
+
+    def __init__(self, entity: SimHandleBase, name: str, clock: SimHandleBase):
+        self.entity = entity
+        self.name = name
+        self.clock = clock
 
     def accepted(self):
         return bool(self.bus.tvalid.value.integer and
@@ -67,23 +155,6 @@ class AXIStreamBase(BusDriver):
     def _capture_current_values(self):
         return (self.tdata_int(), self.tuser_int(), self.tkeep_int())
 
-    async def run_monitor(self):
-        self.monitor.clear()
-        self.current_stream.clear()
-        while True:
-            await RisingEdge(self.clock)
-            if self.accepted():
-                self.current_stream.append(self._capture_current_values())
-                if self.bus.tlast.value.integer:
-                    self.monitor.append(self.current_stream)
-                    self.current_stream = []
-
-    def get_monitor(self):
-        return list(self.monitor)  # a copy
-
-    def get_current_stream(self):
-        return list(self.current_stream)  # a copy
-
     def extract_capture_data(self, capture):
         # TODO: Deprecate (kept for compatibility).
         return extract_capture_data(capture)
@@ -97,27 +168,15 @@ class AXIStreamBase(BusDriver):
         return extract_capture_keep(capture)
 
 
-class AXIStreamMaster(AXIStreamBase):
-    """AXIStreamMaster
+class AXIStreamMasterDriver(AXIStreamBase, AXIStreamMonitorMixin):
+    """AXIStreamMasterDriver
     """
 
-    def __init__(self, entity: SimHandleBase, name: str, clock: SimHandleBase,
-                 **kwargs: Any):
-        super().__init__(entity, name, clock, **kwargs)
-
-        # Drive some sensible defaults (setimmediatevalue to avoid x asserts)
-        self.bus.tvalid.setimmediatevalue(0)
-        self.bus.tlast.setimmediatevalue(0)
-        self.bus.tdata.setimmediatevalue(0)
-        try:
-            self.bus.tkeep.setimmediatevalue(0)
-        except Exception:
-            pass
-        try:
-            self.bus.tuser.setimmediatevalue(0)
-        except Exception:
-            pass
-
+    def __init__(self, entity: SimHandleBase, name: str, clock: SimHandleBase):
+        AXIStreamBase.__init__(self, entity, name, clock)
+        AXIStreamMonitorMixin.__init__(self)
+        self.bus = AXI4StreamMasterBus(entity, name, clock)
+        self.bus.init_signals()
         # Mutex for each channel to prevent contention
         self.wr_busy = Lock(name + "_wbusy")
 
@@ -212,17 +271,15 @@ class AXIStreamMaster(AXIStreamBase):
             )
 
 
-class AXIStreamSlave(AXIStreamBase):
-    """AXIStreamSlave
+class AXIStreamSlaveDriver(AXIStreamBase, AXIStreamMonitorMixin):
+    """AXIStreamSlaveDriver
     """
 
-    def __init__(self, entity: SimHandleBase, name: str, clock: SimHandleBase,
-                 **kwargs: Any):
-        super().__init__(entity, name, clock, **kwargs)
-
-        # Drive some sensible defaults (setimmediatevalue to avoid x asserts)
-        self.bus.tready.setimmediatevalue(0)
-
+    def __init__(self, entity: SimHandleBase, name: str, clock: SimHandleBase):
+        AXIStreamBase.__init__(self, entity, name, clock)
+        AXIStreamMonitorMixin.__init__(self)
+        self.bus = AXI4StreamSlaveBus(entity, name, clock)
+        self.bus.init_signals()
         # Mutex for each channel to prevent contention
         self.rd_busy = Lock(name + "_rbusy")
 
@@ -277,3 +334,23 @@ class AXIStreamSlave(AXIStreamBase):
             s = await self.read(**kwargs)
             streams.append(s)
         return streams
+
+    async def read_driver(
+        self,
+        burps: int,
+    ):
+        while True:
+            while burps and random.getrandbits(1):
+                await RisingEdge(self.clock)
+
+            async with self.rd_busy:
+                self.bus.tready.value = 1
+                await RisingEdge(self.clock)
+                while self.bus.tvalid.value.integer == 0:
+                    await RisingEdge(self.clock)
+            self.bus.tready.value = 0
+
+
+# For backward compatibility
+AXIStreamSlave = AXIStreamSlaveDriver
+AXIStreamMaster = AXIStreamMasterDriver

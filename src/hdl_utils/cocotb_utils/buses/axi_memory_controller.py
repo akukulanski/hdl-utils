@@ -2,7 +2,7 @@ from array import array as Array
 from cocotb.handle import SimHandleBase
 
 from .axi_full import AXI4SlaveDriver
-from ..tb_utils import pack, unpack
+from ..tb_utils import unpack
 
 
 class Memory:
@@ -11,7 +11,6 @@ class Memory:
         self._memory = Array('B',[0 for _ in range(size)])
 
     def __getitem__(self, idx):
-        # print(f"idx={hex(idx)}")
         return self._memory[idx]
 
     def __setitem__(self, idx, value):
