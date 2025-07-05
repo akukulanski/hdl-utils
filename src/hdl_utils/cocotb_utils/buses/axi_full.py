@@ -1,82 +1,97 @@
-# Copyright (c) 2014 Potential Ventures Ltd
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#     * Redistributions of source code must retain the above copyright
-#       notice, this list of conditions and the following disclaimer.
-#     * Redistributions in binary form must reproduce the above copyright
-#       notice, this list of conditions and the following disclaimer in the
-#       documentation and/or other materials provided with the distribution.
-#     * Neither the name of Potential Ventures Ltd,
-#       SolarFlare Communications Inc nor the
-#       names of its contributors may be used to endorse or promote products
-#       derived from this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL POTENTIAL VENTURES LTD BE LIABLE FOR ANY
-# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-"""Drivers for Advanced Microcontroller Bus Architecture."""
-
-import sys
-import cocotb
-from cocotb.triggers import RisingEdge, ReadOnly, Lock
-from cocotb_bus.drivers import BusDriver
-from cocotb.binary import BinaryValue
-
 import array
+import cocotb
+from cocotb.binary import BinaryValue
+from cocotb.handle import SimHandleBase
+from cocotb.triggers import RisingEdge
+
+from .bus import Bus, SignalInfo, DIR_OUTPUT, DIR_INPUT
 
 
 class AXIProtocolError(Exception):
     pass
 
 
-class AXI4Slave(BusDriver):
-    '''
-    AXI4 Slave
+class AXI4SlaveBus(Bus):
 
-    Monitors an internal memory and handles read and write requests.
-    '''
-    _signals = [
-        "ARREADY", "ARVALID", "ARADDR",
-        "ARLEN",   "ARSIZE",  "ARBURST", "ARPROT",
-        "RREADY",  "RVALID",  "RDATA",   "RLAST",
-        "AWREADY", "AWADDR",  "AWVALID",
-        "AWPROT",  "AWSIZE",  "AWBURST", "AWLEN",
-        "WREADY",  "WVALID",  "WDATA",
+    layout = [
+        # Read address channel
+        SignalInfo(name='ARREADY', direction=DIR_OUTPUT, fixed_width=1, optional=False),
+        SignalInfo(name='ARVALID', direction=DIR_INPUT, fixed_width=1, optional=False),
+        SignalInfo(name='ARADDR', direction=DIR_INPUT, fixed_width=None, optional=False),
+        SignalInfo(name='ARLEN', direction=DIR_INPUT, fixed_width=8, optional=False),
+        SignalInfo(name='ARSIZE', direction=DIR_INPUT, fixed_width=3, optional=False),
+        SignalInfo(name='ARBURST', direction=DIR_INPUT, fixed_width=2, optional=False),
+        SignalInfo(name='ARPROT', direction=DIR_INPUT, fixed_width=3, optional=False),
+        SignalInfo(name='ARLOCK', direction=DIR_INPUT, fixed_width=1, optional=True),
+        SignalInfo(name='ARCACHE', direction=DIR_INPUT, fixed_width=4, optional=True),
+        SignalInfo(name='ARQOS', direction=DIR_INPUT, fixed_width=4, optional=True),
+        SignalInfo(name='ARID', direction=DIR_INPUT, fixed_width=None, optional=True),
+        # Read channel
+        SignalInfo(name='RREADY', direction=DIR_INPUT, fixed_width=1, optional=False),
+        SignalInfo(name='RVALID', direction=DIR_OUTPUT, fixed_width=1, optional=False),
+        SignalInfo(name='RDATA', direction=DIR_OUTPUT, fixed_width=None, optional=False),
+        SignalInfo(name='RLAST', direction=DIR_OUTPUT, fixed_width=1, optional=False),
+        SignalInfo(name='RRESP', direction=DIR_OUTPUT, fixed_width=None, optional=True),
+        SignalInfo(name='RID', direction=DIR_OUTPUT, fixed_width=None, optional=True),
+        # Write address channel
+        SignalInfo(name='AWREADY', direction=DIR_OUTPUT, fixed_width=1, optional=False),
+        SignalInfo(name='AWADDR', direction=DIR_INPUT, fixed_width=None, optional=False),
+        SignalInfo(name='AWVALID', direction=DIR_INPUT, fixed_width=1, optional=False),
+        SignalInfo(name='AWPROT', direction=DIR_INPUT, fixed_width=3, optional=False),
+        SignalInfo(name='AWSIZE', direction=DIR_INPUT, fixed_width=3, optional=False),
+        SignalInfo(name='AWBURST', direction=DIR_INPUT, fixed_width=2, optional=False),
+        SignalInfo(name='AWLEN', direction=DIR_INPUT, fixed_width=8, optional=False),
+        SignalInfo(name='AWLOCK', direction=DIR_INPUT, fixed_width=1, optional=True),
+        SignalInfo(name='AWCACHE', direction=DIR_INPUT, fixed_width=4, optional=True),
+        SignalInfo(name='AWQOS', direction=DIR_INPUT, fixed_width=4, optional=True),
+        SignalInfo(name='AWID', direction=DIR_INPUT, fixed_width=None, optional=True),
+        # Write channel
+        SignalInfo(name='WREADY', direction=DIR_OUTPUT, fixed_width=1, optional=False),
+        SignalInfo(name='WVALID', direction=DIR_INPUT, fixed_width=1, optional=False),
+        SignalInfo(name='WDATA', direction=DIR_INPUT, fixed_width=None, optional=False),
+        SignalInfo(name='WLAST', direction=DIR_INPUT, fixed_width=1, optional=True),
+        SignalInfo(name='WSTRB', direction=DIR_INPUT, fixed_width=None, optional=True),
+        # Write response channel
+        SignalInfo(name='BVALID', direction=DIR_OUTPUT, fixed_width=1, optional=True),
+        SignalInfo(name='BREADY', direction=DIR_INPUT, fixed_width=1, optional=True),
+        SignalInfo(name='BRESP', direction=DIR_OUTPUT, fixed_width=None, optional=True),
+        SignalInfo(name='BID', direction=DIR_OUTPUT, fixed_width=None, optional=True),
     ]
+from cocotb_bus.drivers.amba import AXI4LiteMaster
 
-    _optional_signals = [
-        "WLAST",   "WSTRB",
-        "BVALID",  "BREADY",  "BRESP",   "RRESP",
-        "RCOUNT",  "WCOUNT",  "RACOUNT", "WACOUNT",
-        "ARLOCK",  "AWLOCK",  "ARCACHE", "AWCACHE",
-        "ARQOS",   "AWQOS",   "ARID",    "AWID",
-        "BID",     "RID",     "WID"
-    ]
+class AXI4SlaveDriver:
 
-    def __init__(self, entity, name, clock, memory, baseaddr=0, read_callback=None,
-                 big_endian=False, **kwargs):
-
-        super().__init__(entity, name, clock, **kwargs)
+    def __init__(
+        self,
+        dut: SimHandleBase,
+        name,
+        clock: SimHandleBase,
+        memory,
+        baseaddr: int = 0,
+        big_endian: bool = False,
+        run_drivers: bool = True,
+    ):
+        self.dut = dut
+        self.name = name
         self.clock = clock
-
         self.big_endian = big_endian
-        self.bus.ARREADY.setimmediatevalue(1)
-        self.bus.RVALID.setimmediatevalue(0)
-        self.bus.RLAST.setimmediatevalue(0)
-        self.bus.AWREADY.setimmediatevalue(1)
         self.baseaddr = baseaddr
         self._memory = memory
+        self.bus = AXI4SlaveBus(dut, name, clock)
 
+        if run_drivers:
+            self.run_drivers()
+
+    def _init_signals(self):
+        for signal_info in AXI4SlaveBus.layout:
+            if signal_info.direction == DIR_OUTPUT:
+                signal = getattr(self.bus, signal_info.name, None)
+                if signal is not None:
+                    # signal.setimmediatevalue(signal_info.default_value)
+                    signal.value = signal_info.default_value
+
+    def run_drivers(self):
+        self._init_signals()
         cocotb.fork(self._read_data())
         cocotb.fork(self._write_data())
 
@@ -85,16 +100,8 @@ class AXI4Slave(BusDriver):
             return 2 ** AxSIZE
         return None
 
-    async def reset(self):
-        self.bus.AWPROT = 0
-        self.bus.ARPROT = 0
-        rst = getattr(self.entity, self.bus._name + "_ARESETN")
-        await RisingEdge(self.clock)
-        rst.value = 0
-        await RisingEdge(self.clock)
-        rst.value = 1
-
     async def _write_data(self):
+        await RisingEdge(self.clock)
         while True:
             self.bus.BRESP.value = 0
             self.bus.WREADY.value = 0
@@ -123,6 +130,7 @@ class AXI4Slave(BusDriver):
                 _burst_diff = burst_length - burst_count
                 start_addr = _awaddr + b * bytes_in_beat
                 end_addr = start_addr + bytes_in_beat
+                assert end_addr <= len(self._memory), f"out of range: {hex(end_addr)} > {hex(len(self._memory))}"
                 self._memory[start_addr:end_addr] = array.array('B', word.buff)
 
             if not self.bus.WLAST.value:
@@ -137,67 +145,52 @@ class AXI4Slave(BusDriver):
             self.bus.BVALID.value = 0
 
     async def _read_data(self):
-        self.bus.RDATA.value = 0
-        self.bus.RRESP.value = 0
-
+        await RisingEdge(self.clock)
         while True:
-            self.bus.ARREADY.value = 0
-            while True:
-                if self.bus.ARVALID.value:
-                    self.bus.ARREADY.value = 1
-                    break
+            # Receive Read Address
+            self.bus.ARREADY.value = 1
+            await RisingEdge(self.clock)
+            while not self.bus.ARVALID.value.integer:
                 await RisingEdge(self.clock)
+            self.bus.ARREADY.value = 0
 
-            await ReadOnly()
             _araddr = int(self.bus.ARADDR)
             _arlen = int(self.bus.ARLEN)
             _arsize = int(self.bus.ARSIZE)
             _arburst = int(self.bus.ARBURST)
             _arprot = int(self.bus.ARPROT)
+            # FIXME: ARBURST ignored and assumed to be INCR.
 
             burst_length = _arlen + 1
             bytes_in_beat = self._size_to_bytes_in_beat(_arsize)
-
             word = BinaryValue(n_bits=bytes_in_beat*8, bigEndian=self.big_endian)
-
-            if __debug__:
-                self.log.debug(
-                    "ARADDR  %d\n" % _araddr +
-                    "ARLEN   %d\n" % _arlen +
-                    "ARSIZE  %d\n" % _arsize +
-                    "ARBURST %d\n" % _arburst +
-                    "BURST_LENGTH %d\n" % burst_length +
-                    "Bytes in beat %d\n" % bytes_in_beat)
-
             burst_count = burst_length
 
-            await RisingEdge(self.clock)
-            self.bus.ARREADY.value = 0
-
-            while True:
+            # Send data burst
+            while burst_count:
+                # Calculate start and end address to send in this data beat
+                _burst_diff = burst_length - burst_count
+                _st = _araddr - self.baseaddr + \
+                    (_burst_diff * bytes_in_beat)
+                _end = _araddr - self.baseaddr + \
+                    ((_burst_diff + 1) * bytes_in_beat)
+                assert _end <= len(self._memory), f"out of range: {hex(_end)} > {hex(len(self._memory))}"
+                word = self._memory[_st:_end]
+                word = ''.join(["{:02x}".format(x) for x in word[::-1]])
+                # Send data beat
+                self.bus.RDATA.value = int(word, 16)
                 self.bus.RVALID.value = 1
-
-                if self.bus.RREADY.value or (burst_count == burst_length):
-                    _burst_diff = burst_length - burst_count
-                    _st = _araddr - self.baseaddr + \
-                        (_burst_diff * bytes_in_beat)
-                    _end = _araddr - self.baseaddr + \
-                        ((_burst_diff + 1) * bytes_in_beat)
-                    word = self._memory[_st:_end]
-                    word = ''.join(["{:02x}".format(x) for x in word[::-1]])
-
-                    self.bus.RDATA.value = int(word, 16)
-
-                    burst_count -= 1
-                    if burst_count == 0:
-                        burst_count = burst_length
-                        self.bus.RLAST.value = 1
-                        break
+                self.bus.RLAST.value = 1 if (burst_count == 1) else 0
                 await RisingEdge(self.clock)
-            await RisingEdge(self.clock)
-            while not self.bus.RREADY.value:
-                await RisingEdge(self.clock)
+                while not (self.bus.RREADY.value.integer):
+                    await RisingEdge(self.clock)
+                burst_count -= 1
 
+            # End of burst, restore signals value
             self.bus.RVALID.value = 0
             self.bus.RLAST.value = 0
             self.bus.RDATA.value = 0
+
+
+# Backward compatibility
+AXI4Slave = AXI4SlaveDriver
