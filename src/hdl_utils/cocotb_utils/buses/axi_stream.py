@@ -62,8 +62,7 @@ class AXIStreamMonitorMixin:
     async def run_full_monitor(self):
         """Monitor that registers tdata, tuser and tkeep.
         """
-        self._full_monitor_streams.clear()
-        self._full_monitor_current_stream.clear()
+        self.reset_full_monitor()
         while True:
             await RisingEdge(self.clock)
             if self.accepted():
@@ -83,12 +82,19 @@ class AXIStreamMonitorMixin:
         streams = copy.deepcopy(streams)
         return streams
 
+    def reset_full_monitor(self):
+        self._full_monitor_streams.clear()
+        self._full_monitor_current_stream.clear()
+
     # Method names backward compatibility
     def get_monitor(self):
         return self.get_full_monitor_streams()
 
     def get_current_stream(self):
         return self.get_full_monitor_current_stream()
+
+    def reset_monitor(self):
+        self.reset_full_monitor()
 
     @property
     def monitor(self):
@@ -101,8 +107,7 @@ class AXIStreamMonitorMixin:
     async def run_data_monitor(self):
         """Monitor that registers tdata only (no tuser, no tkeep)
         """
-        self._data_monitor.clear()
-        self._current_data_stream.clear()
+        self.reset_data_monitor()
         while True:
             await RisingEdge(self.clock)
             if self.accepted():
@@ -110,6 +115,10 @@ class AXIStreamMonitorMixin:
                 if self.bus.tlast.value.integer:
                     self._data_monitor.append(self._current_data_stream)
                     self._current_data_stream = []
+
+    def reset_data_monitor(self):
+        self._data_monitor.clear()
+        self._current_data_stream.clear()
 
     def get_current_data_stream(self):
         return copy.deepcopy(self._current_data_stream)

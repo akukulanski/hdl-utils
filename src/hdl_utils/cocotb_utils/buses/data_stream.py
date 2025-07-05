@@ -40,8 +40,7 @@ class DataStreamMonitorMixin:
         self._current_data_stream = []
 
     async def run_data_monitor(self):
-        self._data_monitor.clear()
-        self._current_data_stream.clear()
+        self.reset_data_monitor()
         while True:
             await RisingEdge(self.clock)
             if self.accepted():
@@ -49,6 +48,10 @@ class DataStreamMonitorMixin:
                 if self.bus.last.value.integer:
                     self._data_monitor.append(self._current_data_stream)
                     self._current_data_stream = []
+
+    def reset_data_monitor(self):
+        self._data_monitor.clear()
+        self._current_data_stream.clear()
 
     def get_current_data_stream(self):
         return copy.deepcopy(self._current_data_stream)
