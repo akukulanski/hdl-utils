@@ -5,7 +5,7 @@ from cocotb.triggers import RisingEdge
 import os
 import random
 
-from hdl_utils.cocotb_utils.buses.axi_memory_controller import Axi4MemoryController
+from hdl_utils.cocotb_utils.buses.axi_memory_controller import Memory
 from hdl_utils.cocotb_utils.buses.axi_stream import AXIStreamMaster, AXIStreamSlave
 from hdl_utils.cocotb_utils.tb_utils import unpack, pack
 
@@ -23,7 +23,8 @@ class Testbench:
 
     def __init__(self, dut):
         self.dut = dut
-        self.memory_ctrl = Axi4MemoryController(dut, prefix="m_axi_", clk=dut.clk, size=MEM_SIZE)
+        self.memory = Memory(size=MEM_SIZE)
+        self.memory_ctrl = self.memory.create_axi(dut=dut, prefix="m_axi_", clock=dut.clk)
         self.m_axis = AXIStreamMaster(dut, "s_axis_", dut.clk)
         self.s_axis = AXIStreamSlave(dut, "m_axis_", dut.clk)
 
@@ -233,7 +234,7 @@ async def check_write_then_read(dut):
 
     # Check memory initial value
     check_memory(
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=0x0,
         expected=[0] * (MEM_SIZE // (P_DATA_W // 8))
     )
@@ -257,19 +258,19 @@ async def check_write_then_read(dut):
     # Check memory data
     expected_zeros = [0] * (addr // (P_DATA_W // 8))
     check_memory(  # Zeros before
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=0x0,
         expected=expected_zeros,
     )
     dut._log.info('zeros before ok')
     check_memory( # Written memory
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=addr,
         expected=data,
     )
     dut._log.info('data ok')
     check_memory(  # Zeros after
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=addr + burst_len * (P_DATA_W // 8),
         expected=expected_zeros,
     )
@@ -287,19 +288,19 @@ async def check_write_then_read(dut):
     dut._log.info(f'Done.')
     # Check memory data (no changes expected)
     check_memory(  # Zeros before
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=0x0,
         expected=expected_zeros,
     )
     dut._log.info('zeros before ok')
     check_memory(  # Written memory
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=addr,
         expected=data,
     )
     dut._log.info('data ok')
     check_memory(  # Zeros after
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=0x200 + burst_len * (P_DATA_W // 8),
         expected=expected_zeros,
     )
@@ -318,7 +319,7 @@ async def check_write_read(dut):
 
     # Check memory initial value
     check_memory(
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=0x0,
         expected=[0] * (MEM_SIZE // (P_DATA_W // 8))
     )
@@ -332,7 +333,7 @@ async def check_write_read(dut):
     addr_rd = addr_wr + burst_len * (P_DATA_W // 8)
 
     read_zone_data = list(range(n_bytes))[::-1]
-    tb.memory_ctrl[addr_rd:addr_rd + n_bytes] = read_zone_data
+    tb.memory[addr_rd:addr_rd + n_bytes] = read_zone_data
 
     # Write a complete burst of 256 beats
     dut._log.info(f'Writing burst...')
@@ -358,19 +359,19 @@ async def check_write_read(dut):
     # Check memory data
     expected_zeros = [0] * (addr_wr // (P_DATA_W // 8))
     check_memory(  # Zeros before
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=0x0,
         expected=expected_zeros,
     )
     dut._log.info('zeros before ok')
     check_memory( # Written memory
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=addr_wr,
         expected=data,
     )
     dut._log.info('data ok')
     check_memory_bytes(
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=addr_rd,
         expected=read_zone_data,
     )
@@ -417,7 +418,7 @@ async def check_multiple_writes_reads(dut):
                 break
         # Check memory
         check_memory(
-            memory=tb.memory_ctrl,
+            memory=tb.memory,
             base_addr=addr,
             expected=expected_data,
         )
@@ -442,7 +443,7 @@ async def check_write_early_tlast(dut):
 
     # Check memory initial value
     check_memory(
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=0x0,
         expected=[0] * (MEM_SIZE // (P_DATA_W // 8))
     )
@@ -461,10 +462,10 @@ async def check_write_early_tlast(dut):
         elements=P_DATA_W // 8,
         element_width=8,
     ))
-    tb.memory_ctrl[addr:addr + n_bytes] = mem_init
+    tb.memory[addr:addr + n_bytes] = mem_init
 
     check_memory(
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=addr,
         expected=mem_init_packed,
     )
@@ -481,7 +482,7 @@ async def check_write_early_tlast(dut):
     # Check memory
     expected_data = data + mem_init_packed[-n_missing:]
     check_memory(
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=addr,
         expected=expected_data,
     )
@@ -512,7 +513,7 @@ async def check_write_early_tlast(dut):
         qos=1,
     )
     check_memory( # Written memory
-        memory=tb.memory_ctrl,
+        memory=tb.memory,
         base_addr=addr,
         expected=data,
     )
