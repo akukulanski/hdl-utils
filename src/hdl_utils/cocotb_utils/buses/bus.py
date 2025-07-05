@@ -39,12 +39,13 @@ class Bus(ABC):
 
     layout: list[SignalInfo]
 
-    def __init__(self, dut, name, clock):
-        self.dut = dut
+    def __init__(self, entity, name, clock):
+        self.entity = entity
         self.name = name
+        self.clock = clock
         for signal_info in self.layout:
             signal_full_name = f"{name}_{signal_info.name}"
-            signal = getattr(self.dut, signal_full_name, None)
+            signal = getattr(self.entity, signal_full_name, None)
             assert signal is not None or signal_info.optional, (
                 f"Missing required signal: {signal_full_name}"
             )

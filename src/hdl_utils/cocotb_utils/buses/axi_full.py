@@ -75,7 +75,7 @@ class AXI4SlaveDriver:
 
     def __init__(
         self,
-        dut: SimHandleBase,
+        entity: SimHandleBase,
         name,
         clock: SimHandleBase,
         memory,
@@ -83,13 +83,13 @@ class AXI4SlaveDriver:
         big_endian: bool = False,
         run_drivers: bool = True,
     ):
-        self.dut = dut
+        self.entity = entity
         self.name = name
         self.clock = clock
         self.big_endian = big_endian
         self.baseaddr = baseaddr
         self._memory = memory
-        self.bus = AXI4SlaveBus(dut, name, clock)
+        self.bus = AXI4SlaveBus(entity, name, clock)
         self.bus.init_signals()
 
         if run_drivers:
@@ -200,14 +200,14 @@ class AXI4MasterDriver:
 
     def __init__(
         self,
-        dut: SimHandleBase,
+        entity: SimHandleBase,
         name,
         clock: SimHandleBase,
     ):
-        self.dut = dut
+        self.entity = entity
         self.name = name
         self.clock = clock
-        self.bus = AXI4MasterBus(dut, name, clock)
+        self.bus = AXI4MasterBus(entity, name, clock)
         self.bus.init_signals()
 
 

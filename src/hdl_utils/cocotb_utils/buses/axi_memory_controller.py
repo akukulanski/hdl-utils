@@ -20,8 +20,8 @@ class Memory:
     def memory(self):
         return self._memory
 
-    def create_axi(self, dut: SimHandleBase, prefix: str, clock: SimHandleBase, **kwargs) -> AXI4SlaveDriver:
-        return AXI4SlaveDriver(dut, prefix, clock, memory=self._memory, **kwargs)
+    def create_axi(self, entity: SimHandleBase, prefix: str, clock: SimHandleBase, **kwargs) -> AXI4SlaveDriver:
+        return AXI4SlaveDriver(entity, prefix, clock, memory=self._memory, **kwargs)
 
 
 def memory_init(

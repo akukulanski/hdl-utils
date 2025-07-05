@@ -24,7 +24,7 @@ class Testbench:
     def __init__(self, dut):
         self.dut = dut
         self.memory = Memory(size=MEM_SIZE)
-        self.memory_ctrl = self.memory.create_axi(dut=dut, prefix="m_axi_", clock=dut.clk)
+        self.memory_ctrl = self.memory.create_axi(entity=dut, prefix="m_axi_", clock=dut.clk)
         self.m_axis = AXIStreamMaster(dut, "s_axis_", dut.clk)
         self.s_axis = AXIStreamSlave(dut, "m_axis_", dut.clk)
 
