@@ -1,6 +1,5 @@
 from cocotb.triggers import Lock, RisingEdge
 from cocotb.handle import SimHandleBase
-from cocotb_bus.drivers import BusDriver
 
 from .bus import Bus, SignalInfo, DIR_OUTPUT, DIR_INPUT
 
