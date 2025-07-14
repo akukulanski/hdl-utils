@@ -162,45 +162,36 @@ class AxiDma(Elaboratable):
                         wr_addr_r.eq(self.wr_addr),
                         wr_qos_r.eq(self.wr_qos),
                         wr_offset.eq(0),
-                        wr_beats_remaining.eq(self.wr_len_beats),
+                        wr_beats_remaining.eq(self.wr_len_beats - 1),
                         self.wr_finish.eq(0),
                     ]
                     m.next = "WR_BURST_STARTED"
 
             with m.State("WR_BURST_STARTED"):
 
-                with m.If(self.sink.accepted()):
-                    with m.If(wr_beats_remaining > 0):
-                        m.d.sync += wr_beats_remaining.eq(wr_beats_remaining - 1)
-
                 with m.If(self.axi_stream_to_full.wr_idle):
-                    # Ready for new burst
-                    with m.If(wr_beats_remaining > 0):
-                        # Beats remaining, configure the new burst
-                        m.d.comb += [
-                            self.axi_stream_to_full.wr_valid.eq(1),
-                            self.axi_stream_to_full.wr_addr.eq(wr_addr_r + wr_offset + addr_jump),
-                            self.axi_stream_to_full.wr_qos.eq(wr_qos_r),
-                            self.axi_stream_to_full.wr_burst.eq(minimum(AWLEN_CONST, wr_beats_remaining - 1)),
-                            self.wr_ack.eq(0),
+                    # Beats remaining, configure the new burst
+                    m.d.comb += [
+                        self.axi_stream_to_full.wr_valid.eq(1),
+                        self.axi_stream_to_full.wr_addr.eq(wr_addr_r + wr_offset + addr_jump),
+                        self.axi_stream_to_full.wr_qos.eq(wr_qos_r),
+                        self.axi_stream_to_full.wr_burst.eq(minimum(AWLEN_CONST, wr_beats_remaining)),
+                        self.wr_ack.eq(0),
+                    ]
+                    m.d.comb += disconnect_sink()
+                    with m.If(self.axi_stream_to_full.wr_valid & self.axi_stream_to_full.wr_ready):
+                        m.d.sync += [
+                            wr_offset.eq(wr_offset + addr_jump),
                         ]
-                        m.d.comb += disconnect_sink()
-                        with m.If(self.axi_stream_to_full.wr_valid & self.axi_stream_to_full.wr_ready):
-                            m.d.sync += [
-                                wr_offset.eq(wr_offset + addr_jump),
-                            ]
-                    with m.Else():
-                        # No beats remaining, back to wait for new dma config
-                        m.d.comb += set_dma_wr_busy()
-                        m.d.comb += disconnect_sink()
-                        m.d.sync += self.wr_finish.eq(1)
-                        m.next = "WR_PREPARE"
 
                 with m.Else():
                     m.d.comb += set_dma_wr_busy()
                     wiring.connect(m, self.sink.as_master(), self.axi_stream_to_full.s_axis)
-                    with m.If(self.sink.accepted() & self.sink.tlast):
-                        m.d.sync += wr_beats_remaining.eq(0)  # redundant
+
+                    with m.If(self.sink.accepted() & (wr_beats_remaining > 0)):
+                        m.d.sync += wr_beats_remaining.eq(wr_beats_remaining - 1)
+
+                    with m.If(self.sink.accepted() & (self.sink.tlast | (wr_beats_remaining == 0))):
                         m.d.sync += self.wr_finish.eq(1)
                         m.next = "WR_PREPARE"
 
@@ -241,36 +232,26 @@ class AxiDma(Elaboratable):
                         rd_addr_r.eq(self.rd_addr),
                         rd_qos_r.eq(self.rd_qos),
                         rd_offset.eq(0),
-                        rd_beats_remaining.eq(self.rd_len_beats),
+                        rd_beats_remaining.eq(self.rd_len_beats - 1),
                         self.rd_finish.eq(0),
                     ]
                     m.next = "RD_BURST_STARTED"
 
             with m.State("RD_BURST_STARTED"):
 
-                with m.If(self.source.accepted()):
-                    with m.If(rd_beats_remaining > 0):
-                        m.d.sync += rd_beats_remaining.eq(rd_beats_remaining - 1)
-
                 with m.If(self.axi_stream_to_full.rd_idle):
-                    with m.If(rd_beats_remaining > 0):
-                        m.d.comb += [
-                            self.axi_stream_to_full.rd_valid.eq(1),
-                            self.axi_stream_to_full.rd_addr.eq(rd_addr_r + rd_offset + addr_jump),
-                            self.axi_stream_to_full.rd_qos.eq(rd_qos_r),
-                            self.axi_stream_to_full.rd_burst.eq(minimum(ARLEN_CONST, rd_beats_remaining - 1)),
-                            self.rd_ack.eq(0),
+                    m.d.comb += [
+                        self.axi_stream_to_full.rd_valid.eq(1),
+                        self.axi_stream_to_full.rd_addr.eq(rd_addr_r + rd_offset + addr_jump),
+                        self.axi_stream_to_full.rd_qos.eq(rd_qos_r),
+                        self.axi_stream_to_full.rd_burst.eq(minimum(ARLEN_CONST, rd_beats_remaining)),
+                        self.rd_ack.eq(0),
+                    ]
+                    m.d.comb += disconnect_source()
+                    with m.If(self.axi_stream_to_full.rd_valid & self.axi_stream_to_full.rd_ready):
+                        m.d.sync += [
+                            rd_offset.eq(rd_offset + addr_jump),
                         ]
-                        m.d.comb += disconnect_source()
-                        with m.If(self.axi_stream_to_full.rd_valid & self.axi_stream_to_full.rd_ready):
-                            m.d.sync += [
-                                rd_offset.eq(rd_offset + addr_jump),
-                            ]
-                    with m.Else():
-                        m.d.comb += set_dma_rd_busy()
-                        m.d.comb += disconnect_source()
-                        m.d.sync += self.rd_finish.eq(1)
-                        m.next = "RD_PREPARE"
 
                 with m.Else():
                     m.d.comb += set_dma_rd_busy()
@@ -278,10 +259,14 @@ class AxiDma(Elaboratable):
                         self.source.tvalid.eq(self.axi_stream_to_full.m_axis.tvalid),
                         self.source.tdata.eq(self.axi_stream_to_full.m_axis.tdata),
                         self.source.tlast.eq(
-                            self.axi_stream_to_full.m_axis.tvalid & (rd_beats_remaining == 1)
+                            self.axi_stream_to_full.m_axis.tvalid & (rd_beats_remaining == 0)
                         ),
                         self.axi_stream_to_full.m_axis.tready.eq(self.source.tready),
                     ]
+
+                    with m.If(self.source.accepted() & (rd_beats_remaining > 0)):
+                        m.d.sync += rd_beats_remaining.eq(rd_beats_remaining - 1)
+
                     with m.If(self.source.accepted() & self.source.tlast):
                         m.d.sync += self.rd_finish.eq(1)
                         with m.If(self.axi_stream_to_full.m_axis.tlast):

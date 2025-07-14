@@ -395,5 +395,5 @@ else:
     tf_tb_check_read_postfix = '_full'
 
 
-# tf_tb_check_write.generate_tests(postfix=tf_tb_check_write_postfix)
+tf_tb_check_write.generate_tests(postfix=tf_tb_check_write_postfix)
 tf_tb_check_read.generate_tests(postfix=tf_tb_check_read_postfix)
