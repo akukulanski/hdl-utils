@@ -301,6 +301,27 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
 
+    @pytest.mark.parametrize('addr_w,data_w,user_w,burst_len', [(32, 128, 0, 8)])
+    def test_axi_dma(self, addr_w, data_w, user_w, burst_len):
+        from hdl_utils.amaranth_utils.axi_dma import AxiDma
+        core = AxiDma(
+            addr_w=addr_w,
+            data_w=data_w,
+            user_w=user_w,
+            burst_len=burst_len,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_dma'
+        vcd_file = './tb_axi_dma.py.vcd'
+        env = {
+            'P_ADDR_W': str(addr_w),
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+            'P_BURST_LEN': str(burst_len),
+        }
+        self.run_testbench(core, test_module, ports,
+                           vcd_file=vcd_file, env=env)
+
     @pytest.mark.parametrize(
         'data_w,user_w,no_tkeep,n_split',
         [

@@ -1,3 +1,13 @@
+from cocotb.handle import SimHandleBase
+from cocotb.triggers import RisingEdge
+import random
+
+from hdl_utils.cocotb_utils.buses.axi_stream import (
+    AXIStreamMaster,
+)
+from hdl_utils.cocotb_utils.buses.bus import Bus
+
+
 __all__ = [
     'pack',
     'unpack',
@@ -64,3 +74,105 @@ def width_converter_down(data_in, width_in, width_out):
     return list(unpack(buffer=data_in, elements=scale, element_width=width_out))
 
 
+def as_int(x):
+    assert x == int(x)
+    return int(x)
+
+
+def get_rand_stream(width: int, length: int) -> list[int]:
+    return [
+        random.getrandbits(width)
+        for _ in range(length)
+    ]
+
+
+def check_axi_stream_iface(
+    dut,
+    prefix,
+    data_w,
+    user_w,
+    no_tkeep,
+):
+    assert len(getattr(dut, f"{prefix}tvalid")) == 1
+    assert len(getattr(dut, f"{prefix}tready")) == 1
+    assert len(getattr(dut, f"{prefix}tlast")) == 1
+    assert len(getattr(dut, f"{prefix}tdata")) == data_w
+    if user_w > 0:
+        assert len(getattr(dut, f"{prefix}tuser")) == user_w
+    else:
+        assert not hasattr(dut, f"{prefix}tuser")
+    if no_tkeep:
+        assert not hasattr(dut, f"{prefix}tkeep")
+    else:
+        assert len(getattr(dut, f"{prefix}tkeep")) == data_w // 8
+
+
+def check_axi_full_iface(
+    dut,
+    prefix,
+    data_w,
+    addr_w,
+):
+    assert len(getattr(dut, f'{prefix}ARVALID')) == 1
+    assert len(getattr(dut, f'{prefix}ARADDR')) == addr_w
+    assert len(getattr(dut, f'{prefix}RVALID')) == 1
+    assert len(getattr(dut, f'{prefix}RDATA')) == data_w
+    assert len(getattr(dut, f'{prefix}AWVALID')) == 1
+    assert len(getattr(dut, f'{prefix}AWADDR')) == addr_w
+    assert len(getattr(dut, f'{prefix}WVALID')) == 1
+    assert len(getattr(dut, f'{prefix}WDATA')) == data_w
+
+
+def stream_to_hex(arr: list) -> list[str]:
+    return [hex(x) for x in arr]
+
+
+def check_memory_bytes(memory, base_addr: int, expected: list[int]):
+    for offset, value in enumerate(expected):
+        addr = base_addr + offset
+        # print(f'addr={hex(base_addr)}+{hex(offset)}: exp={hex(value)} ; got={hex(memory[addr])}')
+        assert memory[addr] == value, (
+            f"Error in address {hex(addr)}: Expected {hex(value)}, Got {hex(memory[addr])}"
+        )
+
+
+def check_memory_data(
+    memory,
+    base_addr: int,
+    expected: list[int],
+    data_width: int,
+):
+    check_memory_bytes(
+        memory=memory,
+        base_addr=base_addr,
+        expected=unpack(
+            buffer=expected,
+            elements=data_width // 8,
+            element_width=8,
+        ),
+    )
+
+
+async def wait_n_streams(
+    bus: Bus,
+    clock: SimHandleBase,
+    n_streams: int,
+):
+    for _ in range(n_streams):
+        await RisingEdge(clock)
+        while not (bus.tvalid.value.integer and bus.tlast.value.integer and bus.tready.value.integer):
+            await RisingEdge(clock)
+    await RisingEdge(clock)
+
+
+async def send_data_repeatedly(
+    driver: AXIStreamMaster,
+    data: list[int],
+    burps: bool,
+    n_repeat: int = 0,
+):
+    while True:
+        await driver.write(data=data, burps=burps)
+        n_repeat -= 1
+        if n_repeat == 0:
+            break

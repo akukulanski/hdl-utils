@@ -239,6 +239,7 @@ class AxiStreamToFull(Elaboratable):
                     self.m_axis.tvalid.eq(0),
                     self.m_axis.tlast.eq(0),
                     self.m_axis.tdata.eq(0),
+                    self.rd_idle.eq(1),
                 ]
                 with m.If(self.m_axi.ar_accepted()):
                     m.next = "RD_DATA"
@@ -254,6 +255,7 @@ class AxiStreamToFull(Elaboratable):
                     self.m_axis.tvalid.eq(self.m_axi.RVALID),
                     self.m_axis.tlast.eq(self.m_axi.RLAST),
                     self.m_axis.tdata.eq(self.m_axi.RDATA),
+                    self.rd_idle.eq(0),
                 ]
                 with m.If(self.m_axi.r_accepted() & self.m_axi.RLAST):
                     m.next = "RD_WAITING_ADDR"
