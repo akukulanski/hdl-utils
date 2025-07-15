@@ -2,37 +2,7 @@ from amaranth import Elaboratable, Module, Signal, Mux, Const
 from amaranth.lib import wiring
 
 from hdl_utils.amaranth_utils.interfaces.axi4_stream import AXI4StreamSignature
-from hdl_utils.amaranth_utils.axi_lite_device import AxiLiteDevice
 from hdl_utils.amaranth_utils.axi_stream_to_full import AxiStreamToFull
-
-
-def connect_axi_stream_permissive(
-    master,
-    slave,
-    exclude: list = None,
-    permissive: bool = False,
-) -> list:
-    exclude = exclude or []
-    m_to_s = ["tvalid", "tdata", "tlast", "tuser", "tkeep"]
-    s_to_m = ["tready",]
-    connections = []
-    for sig_name in m_to_s + s_to_m:
-        if sig_name in exclude:
-            continue
-        if not permissive:
-            assert hasattr(slave, sig_name) and hasattr(master, sig_name)
-        if sig_name in m_to_s:
-            connections += [
-                getattr(slave, sig_name).eq(getattr(master, sig_name)),
-            ]
-        elif sig_name in s_to_m:
-            connections += [
-                getattr(master, sig_name).eq(getattr(slave, sig_name)),
-            ]
-        else:
-            raise ValueError(f"{sig_name} not in m_to_s and not in s_to_m")
-
-    return connections
 
 
 class AxiDma(Elaboratable):
