@@ -125,16 +125,14 @@ async def tb_check_data_consistency_wo_ro(
     dut,
     burps_wr: bool,
     burps_rd: bool,
-    base_addr_0: int,
-    base_addr_1: int,
-    base_addr_2: int,
     length: int,
+    buffer_address_array: list[int],
     wr_dont_change_buffer_if_incomplete: int,
 ):
+    check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
     wr_qos = rd_qos = 1
     wr_len_beats = rd_len_beats = length
     wr_dont_change_buffer_if_incomplete = int(bool(wr_dont_change_buffer_if_incomplete))
-    buffer_address_array = [base_addr_0, base_addr_1, base_addr_2]
     n_streams_wo_ro = 5
 
     check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
@@ -146,9 +144,9 @@ async def tb_check_data_consistency_wo_ro(
     dut.rd_qos.value = rd_qos
     dut.wr_len_beats.value = wr_len_beats
     dut.rd_len_beats.value = rd_len_beats
-    dut.base_addr_0.value = base_addr_0
-    dut.base_addr_1.value = base_addr_1
-    dut.base_addr_2.value = base_addr_2
+    dut.base_addr_0.value = buffer_address_array[0]
+    dut.base_addr_1.value = buffer_address_array[1]
+    dut.base_addr_2.value = buffer_address_array[2]
     dut.wr_dont_change_buffer_if_incomplete.value = wr_dont_change_buffer_if_incomplete
 
     data_wo_ro = [
@@ -247,22 +245,11 @@ async def tb_check_data_consistency_rw(
     dut,
     burps_wr: bool,
     burps_rd: bool,
-    base_addr_0: int,
-    base_addr_1: int,
-    base_addr_2: int,
     length: int,
+    buffer_address_array: list[int],
     wr_dont_change_buffer_if_incomplete: int,
 ):
-    dut._log.info(f'base_addr_0: {hex(base_addr_0)}')
-    dut._log.info(f'base_addr_1: {hex(base_addr_1)}')
-    dut._log.info(f'base_addr_2: {hex(base_addr_2)}')
-    minimum_buffer_size = length * ADDR_JUMP
-    sorted_buff_addr = sorted([base_addr_0, base_addr_1, base_addr_2, MEM_SIZE])
-    for i in range(len(sorted_buff_addr) - 1):
-        assert minimum_buffer_size < (sorted_buff_addr[i+1] - sorted_buff_addr[i]), (
-            f'Inconsistent input parameters: minimum_buffer_size={hex(minimum_buffer_size)}, but the size '
-            f'of buffer #{i} is {hex(sorted_buff_addr[i+1] - sorted_buff_addr[i])}'
-        )
+    check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
 
     wr_qos = rd_qos = 1
     wr_len_beats = rd_len_beats = length
@@ -275,16 +262,10 @@ async def tb_check_data_consistency_rw(
     dut.rd_qos.value = rd_qos
     dut.wr_len_beats.value = wr_len_beats
     dut.rd_len_beats.value = rd_len_beats
-    dut.base_addr_0.value = base_addr_0
-    dut.base_addr_1.value = base_addr_1
-    dut.base_addr_2.value = base_addr_2
+    dut.base_addr_0.value = buffer_address_array[0]
+    dut.base_addr_1.value = buffer_address_array[1]
+    dut.base_addr_2.value = buffer_address_array[2]
     dut.wr_dont_change_buffer_if_incomplete.value = wr_dont_change_buffer_if_incomplete
-
-    buffer_address_array = [
-        base_addr_0,
-        base_addr_1,
-        base_addr_2,
-    ]
 
     n_streams_rw = 20
     data_rw = [
@@ -385,9 +366,90 @@ async def tb_check_throughput(
 
 async def tb_check_wr_early_last(
     dut,
-    wr_dont_change_buffer_if_incomplete: bool,
+    burps_wr: bool,
+    burps_rd: bool,
+    length: int,
+    buffer_address_array: list[int],
+    wr_dont_change_buffer_if_incomplete: int,
 ):
-    raise NotImplementedError()
+    check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
+    wr_qos = rd_qos = 0
+    wr_len_beats = rd_len_beats = length
+    wr_dont_change_buffer_if_incomplete = int(bool(wr_dont_change_buffer_if_incomplete))
+
+    tb = Testbench(dut)
+    await tb.init_test()
+    dut.wr_qos.value = wr_qos
+    dut.rd_qos.value = rd_qos
+    dut.wr_len_beats.value = wr_len_beats
+    dut.rd_len_beats.value = rd_len_beats
+    dut.base_addr_0.value = buffer_address_array[0]
+    dut.base_addr_1.value = buffer_address_array[1]
+    dut.base_addr_2.value = buffer_address_array[2]
+    dut.wr_dont_change_buffer_if_incomplete.value = wr_dont_change_buffer_if_incomplete
+
+    data_length = length - 1  # early tlast
+    data = get_rand_stream(width=P_DATA_W, length=data_length)
+    dut.wr_enable.value = 1
+    dut.rd_enable.value = 0
+    await tb.m_axis.write(data=data, burps=burps_wr)
+    dut.wr_enable.value = 0
+    dut.rd_enable.value = 1
+    rd_streams = await tb.s_axis.read_multiple(n_streams=2, burps=burps_rd)
+
+    if wr_dont_change_buffer_if_incomplete:
+        expected_streams = [
+            [0] * length,
+            [0] * length,
+        ]
+    else:
+        expected_streams = [
+            [0] * length,
+            [*data, 0]
+        ]
+
+    for i in range(len(expected_streams)):
+        rd = rd_streams[i]
+        expected = expected_streams[i]
+        assert len(rd) == len(expected), (
+            f"Length mismatch in read #{i}: {len(rd)} != {len(expected)}\n{to_hex(rd)}\n!=\n{to_hex(expected)}"
+        )
+        assert rd == expected, (
+            f"Data mismatch in read #{i}:\n{to_hex(rd)}\n!=\n{to_hex(expected)}"
+        )
+
+    # Check behavior is restored with complete write
+    prv_data = data
+    data = get_rand_stream(width=P_DATA_W, length=length)
+    dut.wr_enable.value = 1
+    dut.rd_enable.value = 0
+    await tb.m_axis.write(data=data, burps=burps_wr)
+    dut.wr_enable.value = 0
+    dut.rd_enable.value = 1
+    rd_streams = await tb.s_axis.read_multiple(n_streams=2, burps=burps_rd)
+    dut.wr_enable.value = 0
+    dut.rd_enable.value = 0
+
+    if wr_dont_change_buffer_if_incomplete:
+        expected_streams = [
+            [0] * length,
+            data,
+        ]
+    else:
+        expected_streams = [
+            [*prv_data, 0],
+            data,
+        ]
+
+    for i in range(len(expected_streams)):
+        rd = rd_streams[i]
+        expected = expected_streams[i]
+        assert len(rd) == len(expected), (
+            f"Length mismatch in read #{i}: {len(rd)} != {len(expected)}\n{to_hex(rd)}\n!=\n{to_hex(expected)}"
+        )
+        assert rd == expected, (
+            f"Data mismatch in read #{i}:\n{to_hex(rd)}\n!=\n{to_hex(expected)}"
+        )
 
 
 async def tb_check_wr_missing_last(
@@ -401,8 +463,8 @@ TESTCASE_CONFIG_FULL = 'full'
 TESTCASE_CONFIG_REDUCED = 'reduced'
 TESTCASE_CONFIG_MINUMUM = 'minimum'
 
-testcase_config = TESTCASE_CONFIG_FULL
-# testcase_config = TESTCASE_CONFIG_REDUCED
+# testcase_config = TESTCASE_CONFIG_FULL
+testcase_config = TESTCASE_CONFIG_REDUCED
 # testcase_config = TESTCASE_CONFIG_MINUMUM
 
 if testcase_config == TESTCASE_CONFIG_MINUMUM:
@@ -416,7 +478,7 @@ if testcase_config == TESTCASE_CONFIG_MINUMUM:
 elif testcase_config == TESTCASE_CONFIG_REDUCED:
     set_of_burps_wr = [True]
     set_of_burps_rd = [True]
-    set_of_lengths = [3 * P_BURST_LEN, 3 * P_BURST_LEN + 1,]
+    set_of_lengths = [3 * P_BURST_LEN, 3 * P_BURST_LEN + 1, 3 * P_BURST_LEN - 1]
     set_of_buff_addr = [[0x100, 0x500, 0x900]]
     set_of_wr_dont_change_buffer_if_incomplete = [0, 1]
     postfix = '_basic'
@@ -442,11 +504,16 @@ tf_tb_chewr_ck_early_last = TestFactory(test_function=tb_check_wr_early_last)
 tf_tb_chewr_ck_missing_last = TestFactory(test_function=tb_check_wr_missing_last)
 
 
-for tf in (tf_tb_check_data_consistency_wo_ro, tf_tb_check_data_consistency_rw):
+for tf in (
+    tf_tb_check_data_consistency_wo_ro,
+    tf_tb_check_data_consistency_rw,
+    tf_tb_chewr_ck_early_last,
+    tf_tb_chewr_ck_missing_last,
+):
     tf.add_option('burps_wr', set_of_burps_wr)
     tf.add_option('burps_rd', set_of_burps_rd)
     tf.add_option('length', set_of_lengths)
-    tf.add_option(['base_addr_0', 'base_addr_1', 'base_addr_2'], set_of_buff_addr)
+    tf.add_option('buffer_address_array', set_of_buff_addr)
     tf.add_option('wr_dont_change_buffer_if_incomplete', set_of_wr_dont_change_buffer_if_incomplete)
 
 tf_tb_check_throughput.add_option('length', set_of_lengths)
@@ -457,5 +524,5 @@ tf_tb_check_throughput.add_option('wr_dont_change_buffer_if_incomplete', set_of_
 tf_tb_check_data_consistency_wo_ro.generate_tests(postfix=postfix)
 tf_tb_check_data_consistency_rw.generate_tests(postfix=postfix)
 tf_tb_check_throughput.generate_tests(postfix=postfix)
-# tf_tb_chewr_ck_early_last.generate_tests()
-# tf_tb_chewr_ck_missing_last.generate_tests()
+tf_tb_chewr_ck_early_last.generate_tests(postfix=postfix)
+# tf_tb_chewr_ck_missing_last.generate_tests(postfix=postfix)

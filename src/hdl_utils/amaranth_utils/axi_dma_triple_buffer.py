@@ -128,6 +128,12 @@ class AXIDmaTripleBuffer(Elaboratable):
                 *self.axi_dma.sink.connect_to_null_source(),
             ]
 
+        def discard_sink_until_tlast() -> list:
+            return [
+                self.sink.connect_to_null_sink(),
+                *self.axi_dma.sink.connect_to_null_source(),
+            ]
+
         def connect_sink_to_dma_wr() -> list:
             return [
                 self.axi_dma.sink.tvalid.eq(self.sink.tvalid),
@@ -190,21 +196,14 @@ class AXIDmaTripleBuffer(Elaboratable):
                 with m.If(self.sink.accepted() & (wr_beats_count > 0)):
                     m.d.sync += wr_beats_count.eq(wr_beats_count - 1)
 
-                with m.If(wr_early_tlast):
-                    with m.If(self.wr_dont_change_buffer_if_incomplete):
-                        # Go to WR_CONFIG. Don't change the buffer where next
-                        # write takes place because the current one was incomplete.
-                        m.next = "WR_CONFIG"
-                    with m.Else():
-                        m.next = "WR_CONFIG"
+                with m.If(wr_early_tlast | wr_last_ok):
+                    m.next = "WR_CONFIG"
                 with m.Elif(wr_missing_tlast):
                     m.next = "WR_WAIT_LAST"
-                with m.Elif(wr_last_ok):
-                    m.next = "WR_CONFIG"
 
             with m.State("WR_WAIT_LAST"):
                 m.d.comb += set_dma_wr_busy()
-                m.d.comb += disconnect_sink()
+                m.d.comb += discard_sink_until_tlast()
                 m.d.comb += go_to_next_wr_buffer.eq(self.sink.accepted() & self.sink.tlast)
                 with m.If(self.sink.accepted() & self.sink.tlast):
                     m.next = "WR_CONFIG"
