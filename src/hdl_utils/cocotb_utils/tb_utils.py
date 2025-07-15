@@ -170,9 +170,12 @@ async def send_data_repeatedly(
     data: list[int],
     burps: bool,
     n_repeat: int = 0,
+    force_sync_clk_edge: bool = True,
 ):
+    if force_sync_clk_edge:
+        await RisingEdge(driver.clock)
     while True:
-        await driver.write(data=data, burps=burps)
+        await driver.write(data=data, burps=burps, force_sync_clk_edge=False)
         n_repeat -= 1
         if n_repeat == 0:
             break
