@@ -126,6 +126,28 @@ class AxiDma(Elaboratable):
         def minimum(a, b) -> Signal:
             return Mux(a > b, b, a)
 
+        # Sink and Memory Write assignments
+        def disconnect_sink() -> list:
+            return [
+                self.sink.disconnect_from_sink(),
+                *self.axi_stream_to_full.s_axis.connect_to_null_source(),
+            ]
+
+        def connect_sink_to_mem_wr() -> list:
+            return [
+
+            ]
+
+        # Dma Write Config assignments
+        def recv_wr_config() -> list:
+            return [
+                self.axi_stream_to_full.wr_valid.eq(self.wr_start),
+                self.axi_stream_to_full.wr_addr.eq(self.wr_addr),
+                self.axi_stream_to_full.wr_qos.eq(self.wr_qos),
+                self.axi_stream_to_full.wr_burst.eq(minimum(AWLEN_CONST, self.wr_len_beats - 1)),
+                self.wr_ack.eq(self.axi_stream_to_full.wr_ready),
+            ]
+
         def set_dma_wr_busy() -> list:
             return [
                 self.axi_stream_to_full.wr_valid.eq(0),
@@ -135,10 +157,13 @@ class AxiDma(Elaboratable):
                 self.wr_ack.eq(0),
             ]
 
-        def disconnect_sink() -> list:
+        def configure_new_wr_burst() -> list:
             return [
-                self.sink.disconnect_from_sink(),
-                *self.axi_stream_to_full.s_axis.connect_to_null_source(),
+                self.axi_stream_to_full.wr_valid.eq(1),
+                self.axi_stream_to_full.wr_addr.eq(wr_addr_r + wr_offset + addr_jump),
+                self.axi_stream_to_full.wr_qos.eq(wr_qos_r),
+                self.axi_stream_to_full.wr_burst.eq(minimum(AWLEN_CONST, wr_beats_remaining)),
+                self.wr_ack.eq(0),
             ]
 
         with m.FSM() as fsm_wr:
@@ -149,13 +174,7 @@ class AxiDma(Elaboratable):
                 m.next = "WR_PREPARE"
 
             with m.State("WR_PREPARE"):
-                m.d.comb += [
-                    self.axi_stream_to_full.wr_valid.eq(self.wr_start),
-                    self.axi_stream_to_full.wr_addr.eq(self.wr_addr),
-                    self.axi_stream_to_full.wr_qos.eq(self.wr_qos),
-                    self.axi_stream_to_full.wr_burst.eq(minimum(AWLEN_CONST, self.wr_len_beats - 1)),
-                    self.wr_ack.eq(self.axi_stream_to_full.wr_ready),
-                ]
+                m.d.comb += recv_wr_config()
                 m.d.comb += disconnect_sink()
                 with m.If(self.axi_stream_to_full.wr_valid & self.axi_stream_to_full.wr_ready):
                     m.d.sync += [
@@ -171,13 +190,7 @@ class AxiDma(Elaboratable):
 
                 with m.If(self.axi_stream_to_full.wr_idle):
                     # Beats remaining, configure the new burst
-                    m.d.comb += [
-                        self.axi_stream_to_full.wr_valid.eq(1),
-                        self.axi_stream_to_full.wr_addr.eq(wr_addr_r + wr_offset + addr_jump),
-                        self.axi_stream_to_full.wr_qos.eq(wr_qos_r),
-                        self.axi_stream_to_full.wr_burst.eq(minimum(AWLEN_CONST, wr_beats_remaining)),
-                        self.wr_ack.eq(0),
-                    ]
+                    m.d.comb += configure_new_wr_burst()
                     m.d.comb += disconnect_sink()
                     with m.If(self.axi_stream_to_full.wr_valid & self.axi_stream_to_full.wr_ready):
                         m.d.sync += [
@@ -196,6 +209,33 @@ class AxiDma(Elaboratable):
                         m.next = "WR_PREPARE"
 
 
+        # Memory read and Source assignments
+        def disconnect_source() -> list:
+            return [
+                *self.source.connect_to_null_source(),
+                self.axi_stream_to_full.m_axis.disconnect_from_sink(),
+            ]
+
+        def connect_mem_rd_to_source() -> list:
+            return [
+                self.source.tvalid.eq(self.axi_stream_to_full.m_axis.tvalid),
+                self.source.tdata.eq(self.axi_stream_to_full.m_axis.tdata),
+                self.source.tlast.eq(
+                    self.axi_stream_to_full.m_axis.tvalid & (rd_beats_remaining == 0)
+                ),
+                self.axi_stream_to_full.m_axis.tready.eq(self.source.tready),
+            ]
+
+        # Dma Read Config assignments
+        def recv_rd_config() -> list:
+            return [
+                self.axi_stream_to_full.rd_valid.eq(self.rd_start),
+                self.axi_stream_to_full.rd_addr.eq(self.rd_addr),
+                self.axi_stream_to_full.rd_qos.eq(self.rd_qos),
+                self.axi_stream_to_full.rd_burst.eq(minimum(ARLEN_CONST, self.rd_len_beats - 1)),
+                self.rd_ack.eq(self.axi_stream_to_full.rd_ready),
+            ]
+
         def set_dma_rd_busy() -> list:
             return [
                 self.axi_stream_to_full.rd_valid.eq(0),
@@ -205,10 +245,13 @@ class AxiDma(Elaboratable):
                 self.rd_ack.eq(0),
             ]
 
-        def disconnect_source() -> list:
+        def configure_new_rd_burst() -> list:
             return [
-                *self.source.connect_to_null_source(),
-                self.axi_stream_to_full.m_axis.disconnect_from_sink(),
+                self.axi_stream_to_full.rd_valid.eq(1),
+                self.axi_stream_to_full.rd_addr.eq(rd_addr_r + rd_offset + addr_jump),
+                self.axi_stream_to_full.rd_qos.eq(rd_qos_r),
+                self.axi_stream_to_full.rd_burst.eq(minimum(ARLEN_CONST, rd_beats_remaining)),
+                self.rd_ack.eq(0),
             ]
 
         with m.FSM() as fsm_rd:
@@ -219,13 +262,7 @@ class AxiDma(Elaboratable):
                 m.next = "RD_PREPARE"
 
             with m.State("RD_PREPARE"):
-                m.d.comb += [
-                    self.axi_stream_to_full.rd_valid.eq(self.rd_start),
-                    self.axi_stream_to_full.rd_addr.eq(self.rd_addr),
-                    self.axi_stream_to_full.rd_qos.eq(self.rd_qos),
-                    self.axi_stream_to_full.rd_burst.eq(minimum(ARLEN_CONST, self.rd_len_beats - 1)),
-                    self.rd_ack.eq(self.axi_stream_to_full.rd_ready),
-                ]
+                m.d.comb += recv_rd_config()
                 m.d.comb += disconnect_source()
                 with m.If(self.axi_stream_to_full.rd_valid & self.axi_stream_to_full.rd_ready):
                     m.d.sync += [
@@ -240,13 +277,7 @@ class AxiDma(Elaboratable):
             with m.State("RD_BURST_STARTED"):
 
                 with m.If(self.axi_stream_to_full.rd_idle):
-                    m.d.comb += [
-                        self.axi_stream_to_full.rd_valid.eq(1),
-                        self.axi_stream_to_full.rd_addr.eq(rd_addr_r + rd_offset + addr_jump),
-                        self.axi_stream_to_full.rd_qos.eq(rd_qos_r),
-                        self.axi_stream_to_full.rd_burst.eq(minimum(ARLEN_CONST, rd_beats_remaining)),
-                        self.rd_ack.eq(0),
-                    ]
+                    m.d.comb += configure_new_rd_burst()
                     m.d.comb += disconnect_source()
                     with m.If(self.axi_stream_to_full.rd_valid & self.axi_stream_to_full.rd_ready):
                         m.d.sync += [
@@ -255,14 +286,7 @@ class AxiDma(Elaboratable):
 
                 with m.Else():
                     m.d.comb += set_dma_rd_busy()
-                    m.d.comb += [
-                        self.source.tvalid.eq(self.axi_stream_to_full.m_axis.tvalid),
-                        self.source.tdata.eq(self.axi_stream_to_full.m_axis.tdata),
-                        self.source.tlast.eq(
-                            self.axi_stream_to_full.m_axis.tvalid & (rd_beats_remaining == 0)
-                        ),
-                        self.axi_stream_to_full.m_axis.tready.eq(self.source.tready),
-                    ]
+                    m.d.comb += connect_mem_rd_to_source()
 
                     with m.If(self.source.accepted() & (rd_beats_remaining > 0)):
                         m.d.sync += rd_beats_remaining.eq(rd_beats_remaining - 1)
