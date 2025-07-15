@@ -115,7 +115,7 @@ class AxiDma(Elaboratable):
                 self.axi_stream_to_full.wr_addr.eq(self.wr_addr),
                 self.axi_stream_to_full.wr_qos.eq(self.wr_qos),
                 self.axi_stream_to_full.wr_burst.eq(minimum(AWLEN_CONST, self.wr_len_beats - 1)),
-                self.wr_ack.eq(self.axi_stream_to_full.wr_ready),
+                self.wr_ack.eq(self.wr_start & self.axi_stream_to_full.wr_ready),
             ]
 
         def set_dma_wr_busy() -> list:
@@ -203,7 +203,7 @@ class AxiDma(Elaboratable):
                 self.axi_stream_to_full.rd_addr.eq(self.rd_addr),
                 self.axi_stream_to_full.rd_qos.eq(self.rd_qos),
                 self.axi_stream_to_full.rd_burst.eq(minimum(ARLEN_CONST, self.rd_len_beats - 1)),
-                self.rd_ack.eq(self.axi_stream_to_full.rd_ready),
+                self.rd_ack.eq(self.rd_start & self.axi_stream_to_full.rd_ready),
             ]
 
         def set_dma_rd_busy() -> list:
