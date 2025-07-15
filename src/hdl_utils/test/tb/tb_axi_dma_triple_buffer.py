@@ -364,11 +364,12 @@ async def tb_check_throughput(
         assert rd == data
 
 
-async def tb_check_wr_early_last(
+async def tb_check_wr_diff_length(
     dut,
     burps_wr: bool,
     burps_rd: bool,
     length: int,
+    length_diff: int,
     buffer_address_array: list[int],
     wr_dont_change_buffer_if_incomplete: int,
 ):
@@ -376,6 +377,7 @@ async def tb_check_wr_early_last(
     wr_qos = rd_qos = 0
     wr_len_beats = rd_len_beats = length
     wr_dont_change_buffer_if_incomplete = int(bool(wr_dont_change_buffer_if_incomplete))
+    data_length = length + length_diff
 
     tb = Testbench(dut)
     await tb.init_test()
@@ -388,7 +390,7 @@ async def tb_check_wr_early_last(
     dut.base_addr_2.value = buffer_address_array[2]
     dut.wr_dont_change_buffer_if_incomplete.value = wr_dont_change_buffer_if_incomplete
 
-    data_length = length - 1  # early tlast
+    dut._log.info(f'length={length}; data_length={data_length}')
     data = get_rand_stream(width=P_DATA_W, length=data_length)
     dut.wr_enable.value = 1
     dut.rd_enable.value = 0
@@ -397,99 +399,17 @@ async def tb_check_wr_early_last(
     dut.rd_enable.value = 1
     rd_streams = await tb.s_axis.read_multiple(n_streams=2, burps=burps_rd)
 
-    if wr_dont_change_buffer_if_incomplete:
-        expected_streams = [
-            [0] * length,
-            [0] * length,
-        ]
-    else:
-        expected_streams = [
-            [0] * length,
-            [*data, 0]
-        ]
-
-    for i in range(len(expected_streams)):
-        rd = rd_streams[i]
-        expected = expected_streams[i]
-        assert len(rd) == len(expected), (
-            f"Length mismatch in read #{i}: {len(rd)} != {len(expected)}\n{to_hex(rd)}\n!=\n{to_hex(expected)}"
-        )
-        assert rd == expected, (
-            f"Data mismatch in read #{i}:\n{to_hex(rd)}\n!=\n{to_hex(expected)}"
-        )
-
-    # Check behavior is restored with complete write
-    prv_data = data
-    data = get_rand_stream(width=P_DATA_W, length=length)
-    dut.wr_enable.value = 1
-    dut.rd_enable.value = 0
-    await tb.m_axis.write(data=data, burps=burps_wr)
-    dut.wr_enable.value = 0
-    dut.rd_enable.value = 1
-    rd_streams = await tb.s_axis.read_multiple(n_streams=2, burps=burps_rd)
-    dut.wr_enable.value = 0
-    dut.rd_enable.value = 0
-
-    if wr_dont_change_buffer_if_incomplete:
-        expected_streams = [
-            [0] * length,
-            data,
-        ]
-    else:
-        expected_streams = [
-            [*prv_data, 0],
-            data,
-        ]
-
-    for i in range(len(expected_streams)):
-        rd = rd_streams[i]
-        expected = expected_streams[i]
-        assert len(rd) == len(expected), (
-            f"Length mismatch in read #{i}: {len(rd)} != {len(expected)}\n{to_hex(rd)}\n!=\n{to_hex(expected)}"
-        )
-        assert rd == expected, (
-            f"Data mismatch in read #{i}:\n{to_hex(rd)}\n!=\n{to_hex(expected)}"
-        )
-
-
-async def tb_check_wr_missing_last(
-    dut,
-    burps_wr: bool,
-    burps_rd: bool,
-    length: int,
-    buffer_address_array: list[int],
-    wr_dont_change_buffer_if_incomplete: int,
-):
-    check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
-    wr_qos = rd_qos = 0
-    wr_len_beats = rd_len_beats = length
-    wr_dont_change_buffer_if_incomplete = int(bool(wr_dont_change_buffer_if_incomplete))
-
-    tb = Testbench(dut)
-    await tb.init_test()
-    dut.wr_qos.value = wr_qos
-    dut.rd_qos.value = rd_qos
-    dut.wr_len_beats.value = wr_len_beats
-    dut.rd_len_beats.value = rd_len_beats
-    dut.base_addr_0.value = buffer_address_array[0]
-    dut.base_addr_1.value = buffer_address_array[1]
-    dut.base_addr_2.value = buffer_address_array[2]
-    dut.wr_dont_change_buffer_if_incomplete.value = wr_dont_change_buffer_if_incomplete
-
-    data_length = length + 1  # missing tlast
-    data = get_rand_stream(width=P_DATA_W, length=data_length)
-    dut.wr_enable.value = 1
-    dut.rd_enable.value = 0
-    await tb.m_axis.write(data=data, burps=burps_wr)
-    dut.wr_enable.value = 0
-    dut.rd_enable.value = 1
-    rd_streams = await tb.s_axis.read_multiple(n_streams=2, burps=burps_rd)
-
-    if wr_dont_change_buffer_if_incomplete:
-        expected_streams = [
-            [0] * length,
-            data[:length],
-        ]
+    if data_length < length:
+        if wr_dont_change_buffer_if_incomplete:
+            expected_streams = [
+                [0] * length,
+                [0] * length,
+            ]
+        else:
+            expected_streams = [
+                [0] * length,
+                [*data, 0]
+            ]
     else:
         expected_streams = [
             [0] * length,
@@ -518,11 +438,17 @@ async def tb_check_wr_missing_last(
     dut.wr_enable.value = 0
     dut.rd_enable.value = 0
 
-    if wr_dont_change_buffer_if_incomplete:
-        expected_streams = [
-            prv_data[:length],
-            data,
-        ]
+    if data_length < length:
+        if wr_dont_change_buffer_if_incomplete:
+            expected_streams = [
+                [0] * length,
+                data,
+            ]
+        else:
+            expected_streams = [
+                [*prv_data, 0],
+                data,
+            ]
     else:
         expected_streams = [
             prv_data[:length],
@@ -581,15 +507,13 @@ else:
 tf_tb_check_data_consistency_wo_ro = TestFactory(test_function=tb_check_data_consistency_wo_ro)
 tf_tb_check_data_consistency_rw = TestFactory(test_function=tb_check_data_consistency_rw)
 tf_tb_check_throughput = TestFactory(test_function=tb_check_throughput)
-tf_tb_chewr_ck_early_last = TestFactory(test_function=tb_check_wr_early_last)
-tf_tb_chewr_ck_missing_last = TestFactory(test_function=tb_check_wr_missing_last)
+tf_tb_check_wr_diff_length = TestFactory(test_function=tb_check_wr_diff_length)
 
 
 for tf in (
     tf_tb_check_data_consistency_wo_ro,
     tf_tb_check_data_consistency_rw,
-    tf_tb_chewr_ck_early_last,
-    tf_tb_chewr_ck_missing_last,
+    tf_tb_check_wr_diff_length,
 ):
     tf.add_option('burps_wr', set_of_burps_wr)
     tf.add_option('burps_rd', set_of_burps_rd)
@@ -601,9 +525,14 @@ tf_tb_check_throughput.add_option('length', set_of_lengths)
 tf_tb_check_throughput.add_option('buffer_address_array', set_of_buff_addr)
 tf_tb_check_throughput.add_option('wr_dont_change_buffer_if_incomplete', set_of_wr_dont_change_buffer_if_incomplete)
 
+tf_tb_check_wr_diff_length.add_option(
+    'length_diff', [
+        -1, # wr_early_last
+        +1, # wr_missing_last
+    ]
+)
 
 tf_tb_check_data_consistency_wo_ro.generate_tests(postfix=postfix)
 tf_tb_check_data_consistency_rw.generate_tests(postfix=postfix)
 tf_tb_check_throughput.generate_tests(postfix=postfix)
-tf_tb_chewr_ck_early_last.generate_tests(postfix=postfix)
-tf_tb_chewr_ck_missing_last.generate_tests(postfix=postfix)
+tf_tb_check_wr_diff_length.generate_tests(postfix=postfix)
