@@ -4,17 +4,14 @@ from cocotb import start_soon
 from cocotb.regression import TestFactory
 from cocotb.triggers import RisingEdge
 import os
-import random
 
 from hdl_utils.cocotb_utils.buses.axi_memory_controller import Memory, memory_init
 from hdl_utils.cocotb_utils.buses.axi_stream import AXIStreamMaster, AXIStreamSlave
 from hdl_utils.cocotb_utils.tb_utils import (
-    unpack,
     pack,
     check_axi_stream_iface,
     check_axi_full_iface,
     check_memory_data,
-    check_memory_bytes,
     get_rand_stream,
     stream_to_hex as to_hex,
     as_int,
@@ -165,7 +162,7 @@ async def tb_check_write(
         check_memory_data(
             memory=tb.memory,
             base_addr=0x0,
-            expected=[0] * (MEM_SIZE // (P_DATA_W // 8)),
+            expected=[0] * (MEM_SIZE // ADDR_JUMP),
             data_width=P_DATA_W,
         )
         dut._log.info(f'Memory initial value ok')
@@ -182,7 +179,7 @@ async def tb_check_write(
             burps=burps_wr,
         )
         # Check memory data
-        expected_zeros = [0] * (addr // (P_DATA_W // 8))
+        expected_zeros = [0] * (addr // ADDR_JUMP)
         check_memory_data(  # Zeros before
             memory=tb.memory,
             base_addr=0x0,
@@ -199,7 +196,7 @@ async def tb_check_write(
         dut._log.info('data ok')
         check_memory_data(  # Zeros after
             memory=tb.memory,
-            base_addr=addr + len(data) * (P_DATA_W // 8),
+            base_addr=addr + len(data) * ADDR_JUMP,
             expected=expected_zeros,
             data_width=P_DATA_W,
         )
@@ -218,7 +215,7 @@ async def tb_check_read(
     for i in range(3):
 
         # Init memory and check it
-        memory_data = get_rand_stream(width=P_DATA_W, length=MEM_SIZE * 8 // P_DATA_W)
+        memory_data = get_rand_stream(width=P_DATA_W, length=MEM_SIZE // ADDR_JUMP)
         memory_init(
             memory=tb.memory,
             addr=0x0,
@@ -257,10 +254,12 @@ async def tb_check_read(
         print()
         expected = list(pack(
             buffer=mem,
-            elements=P_DATA_W // 8,
+            elements=ADDR_JUMP,
             element_width=8,
         ))
-        # expected = memory_data[addr * 8 // P_DATA_W:addr * 8 // P_DATA_W + length]
+        start_idx = addr // ADDR_JUMP
+        expected_2 = memory_data[start_idx: start_idx + length]
+        assert expected == expected_2
         assert len(rd) == len(expected), (
             f"Length mismatch in read #{i}: {len(rd)} != {len(expected)}\n{to_hex(rd)}\n!=\n{to_hex(expected)}"
         )
@@ -280,75 +279,6 @@ async def tb_check_rw(
 ):
     # Do simultaneous WR/RD (different areas)
     raise NotImplementedError()
-
-    tb = Testbench(dut)
-    await tb.init_test()
-
-    # # Check memory initial value
-    # check_memory_data(
-    #     memory=tb.memory,
-    #     base_addr=0x0,
-    #     expected=[0] * (MEM_SIZE // (P_DATA_W // 8)),
-    #     data_width=P_DATA_W,
-    # )
-    # dut._log.info(f'Memory initial value ok')
-
-    # addr_wr = 0x200
-    # burst_len = 16
-    # n_bytes = burst_len * (P_DATA_W // 8)
-    # data = [random.getrandbits(P_DATA_W) for _ in range(burst_len)]
-    # # data = get_incr_data_128b(length=burst_len)
-    # addr_rd = addr_wr + burst_len * (P_DATA_W // 8)
-
-    # read_zone_data = list(range(n_bytes))[::-1]
-    # tb.memory[addr_rd:addr_rd + n_bytes] = read_zone_data
-
-    # # Write a complete burst of 256 beats
-    # dut._log.info(f'Writing burst...')
-    # p_write = write_burst(
-    #     dut=dut,
-    #     tb=tb,
-    #     addr=addr_wr,
-    #     data=data,
-    #     qos=1,
-    # )
-    # dut._log.info(f'Reading burst...')
-    # p_read = read_burst(
-    #     dut=dut,
-    #     tb=tb,
-    #     addr=addr_rd,
-    #     burst_len=burst_len,
-    #     qos=2,
-    # )
-    # wr = await p_write
-    # rd = await p_read
-
-    # dut._log.info(f'Done.')
-    # # Check memory data
-    # expected_zeros = [0] * (addr_wr // (P_DATA_W // 8))
-    # check_memory_data(  # Zeros before
-    #     memory=tb.memory,
-    #     base_addr=0x0,
-    #     expected=expected_zeros,
-    #     data_width=P_DATA_W,
-    # )
-    # dut._log.info('zeros before ok')
-    # check_memory_data( # Written memory
-    #     memory=tb.memory,
-    #     base_addr=addr_wr,
-    #     expected=data,
-    #     data_width=P_DATA_W,
-    # )
-    # dut._log.info('data ok')
-    # check_memory_bytes(
-    #     memory=tb.memory,
-    #     base_addr=addr_rd,
-    #     expected=read_zone_data,
-    # )
-    # dut._log.info('read zone ok')
-    # assert list(unpack(rd, elements=P_DATA_W // 8, element_width=8)) == read_zone_data, f"{rd}\n!=\n{read_zone_data}"
-    # dut._log.info('read data ok')
-
 
 
 tf_tb_check_write = TestFactory(test_function=tb_check_write)
