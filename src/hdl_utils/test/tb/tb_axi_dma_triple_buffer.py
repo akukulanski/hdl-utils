@@ -133,7 +133,8 @@ async def tb_check_data_consistency_wo_ro(
 ):
     check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
     wr_qos = rd_qos = 1
-    wr_len_beats = rd_len_beats = length
+    wr_len_beats = length
+    rd_len_beats = 0x12345678 if P_IGNORE_RD_SIZE_SIGNAL else length
     wr_dont_change_buffer_if_incomplete = int(bool(wr_dont_change_buffer_if_incomplete))
     n_streams_wo_ro = 5
 
@@ -256,7 +257,8 @@ async def tb_check_data_consistency_rw(
 ):
     check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
     wr_qos = rd_qos = 1
-    wr_len_beats = rd_len_beats = length
+    wr_len_beats = length
+    rd_len_beats = 0x12345678 if P_IGNORE_RD_SIZE_SIGNAL else length
     wr_dont_change_buffer_if_incomplete = int(bool(wr_dont_change_buffer_if_incomplete))
 
     tb = Testbench(dut)
@@ -344,7 +346,8 @@ async def tb_check_throughput(
     check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
     n_streams = 10
     wr_qos = rd_qos = 0
-    wr_len_beats = rd_len_beats = length
+    wr_len_beats = length
+    rd_len_beats = 0x12345678 if P_IGNORE_RD_SIZE_SIGNAL else length
     wr_dont_change_buffer_if_incomplete = int(bool(wr_dont_change_buffer_if_incomplete))
 
     tb = Testbench(dut)
@@ -397,7 +400,8 @@ async def tb_check_wr_diff_length(
 ):
     check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
     wr_qos = rd_qos = 0
-    wr_len_beats = rd_len_beats = length
+    wr_len_beats = length
+    rd_len_beats = 0x12345678 if P_IGNORE_RD_SIZE_SIGNAL else length
     wr_dont_change_buffer_if_incomplete = int(bool(wr_dont_change_buffer_if_incomplete))
     data_length = length + length_diff
 
