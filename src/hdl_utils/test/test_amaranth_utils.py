@@ -320,14 +320,20 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         }
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
 
-    @pytest.mark.parametrize('addr_w,data_w,user_w,burst_len', [(32, 128, 0, 8)])
-    def test_axi_dma_triple_buffer(self, addr_w, data_w, user_w, burst_len):
+    @pytest.mark.parametrize('addr_w,data_w,user_w,burst_len,ignore_rd_size_signal', [
+        (32, 128, 0, 8, False),
+        (32, 128, 0, 8, True),
+    ])
+    def test_axi_dma_triple_buffer(self, addr_w, data_w, user_w, burst_len, ignore_rd_size_signal):
         from hdl_utils.amaranth_utils.axi_dma_triple_buffer import AXIDmaTripleBuffer
+        init_rd_size = 8
         core = AXIDmaTripleBuffer(
             addr_w=addr_w,
             data_w=data_w,
             user_w=user_w,
             burst_len=burst_len,
+            ignore_rd_size_signal=ignore_rd_size_signal,
+            init_rd_size=init_rd_size,
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_dma_triple_buffer'
@@ -337,6 +343,8 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
             'P_BURST_LEN': str(burst_len),
+            'P_INIT_RD_SIZE': str(init_rd_size),
+            'P_IGNORE_RD_SIZE_SIGNAL': str(int(bool(ignore_rd_size_signal))),
         }
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
 

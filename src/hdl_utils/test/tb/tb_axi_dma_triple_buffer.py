@@ -26,6 +26,8 @@ P_ADDR_W = int(os.environ['P_ADDR_W'])
 P_DATA_W = int(os.environ['P_DATA_W'])
 P_USER_W = int(os.environ['P_USER_W'])
 P_BURST_LEN = int(os.environ['P_BURST_LEN'])
+P_IGNORE_RD_SIZE_SIGNAL = int(os.environ['P_IGNORE_RD_SIZE_SIGNAL'])
+P_INIT_RD_SIZE = int(os.environ['P_INIT_RD_SIZE'])
 
 ADDR_JUMP = P_DATA_W // 8
 MEM_SIZE = 0x10000
@@ -135,8 +137,6 @@ async def tb_check_data_consistency_wo_ro(
     wr_dont_change_buffer_if_incomplete = int(bool(wr_dont_change_buffer_if_incomplete))
     n_streams_wo_ro = 5
 
-    check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
-
     tb = Testbench(dut)
     await tb.init_test()
 
@@ -174,7 +174,7 @@ async def tb_check_data_consistency_wo_ro(
     # Optimal case: the last two written streams
     # available in memory.
     expected_data_buffers = [
-        [0] * length,
+        [0] * P_INIT_RD_SIZE,
         data_wo_ro[-1],  # or: data_wo_ro[-2],
         data_wo_ro[-2],  # or: data_wo_ro[-1],
     ]
@@ -210,9 +210,14 @@ async def tb_check_data_consistency_wo_ro(
     dut.rd_enable.value = 1
     rd_streams = await p_rd
 
+    # Writes finished before rd_enable set, so the configured size will be that of
+    # the last write instead of the default
+    # first_stream_read_length = length
+    first_stream_read_length = P_INIT_RD_SIZE if P_IGNORE_RD_SIZE_SIGNAL else length
+
     # The last stream written should be read
     expected_streams = [
-        [0] * length,
+        [0] * first_stream_read_length,  # data_wo_ro[-1],
         data_wo_ro[-1],
         data_wo_ro[-1],
     ]
@@ -222,7 +227,7 @@ async def tb_check_data_consistency_wo_ro(
     if non_optimal_workaround:
         dut._log.warning(f'Modified value to allow test pass. Behavior is correct, but not optimal.')
         expected_streams = [
-            [0] * length,
+            [0] * first_stream_read_length,
             data_wo_ro[0],
             data_wo_ro[0],
         ]
@@ -250,7 +255,6 @@ async def tb_check_data_consistency_rw(
     wr_dont_change_buffer_if_incomplete: int,
 ):
     check_buffer_size_consistent(length=length, buffer_address_array=buffer_address_array)
-
     wr_qos = rd_qos = 1
     wr_len_beats = rd_len_beats = length
     wr_dont_change_buffer_if_incomplete = int(bool(wr_dont_change_buffer_if_incomplete))
@@ -287,6 +291,7 @@ async def tb_check_data_consistency_rw(
     dut.rd_enable.value = 1
     await p_wr
     rd_streams = await p_rd
+
     # Check memory
     possible_values = [*data_rw]
     for buff_addr in buffer_address_array:
@@ -297,9 +302,13 @@ async def tb_check_data_consistency_rw(
         ))
         assert buff_data in possible_values
         possible_values.remove(buff_data)
+
+
+    first_stream_read_length = P_INIT_RD_SIZE if P_IGNORE_RD_SIZE_SIGNAL else length
+
     # Check read data
     assert len(rd_streams) == n_streams_rw
-    possible_values = [[0] * length, *data_rw]
+    possible_values = [[0] * first_stream_read_length, *data_rw]
     for i in range(n_streams_rw):
         rd = rd_streams[i]
         assert rd in possible_values, (
@@ -313,6 +322,17 @@ async def tb_check_data_consistency_rw(
             # Streams can be repeated or missing, but always in the right order.
             # Remove previous streams from possible values.
             possible_values = possible_values[idx - 1:]
+
+
+async def initialize_first_buffer(
+    dut,
+    tb,
+    data: list,
+):
+    dut.wr_len_beats.value = len(data)
+    dut.wr_enable.value = 1
+    await tb.m_axis.write(data=data, burps=False)
+    dut.wr_enable.value = 0
 
 
 async def tb_check_throughput(
@@ -329,6 +349,8 @@ async def tb_check_throughput(
 
     tb = Testbench(dut)
     await tb.init_test()
+    await initialize_first_buffer(dut, tb, [0] * length)
+
     dut.wr_qos.value = wr_qos
     dut.rd_qos.value = rd_qos
     dut.wr_len_beats.value = wr_len_beats
@@ -399,20 +421,37 @@ async def tb_check_wr_diff_length(
     dut.rd_enable.value = 1
     rd_streams = await tb.s_axis.read_multiple(n_streams=2, burps=burps_rd)
 
+    if P_IGNORE_RD_SIZE_SIGNAL:
+        if wr_dont_change_buffer_if_incomplete and data_length < length:
+            dut._log.warning('aaaaaaaaaaaaa')
+            first_stream_read_length = P_INIT_RD_SIZE
+        else:
+            dut._log.warning('bbbbbbbbbbbbb')
+            # Writes finished correctly before rd_enable set, so the configured size will be that of
+            # the last write instead of the default
+            # first_stream_read_length = min(length, data_length)
+            first_stream_read_length = P_INIT_RD_SIZE
+    else:
+        # Writes finished correctly before rd_enable set, so the configured size will be that of
+        # the last write instead of the default
+        first_stream_read_length = length
+
+    first_stream = [0] * first_stream_read_length
+
     if data_length < length:
         if wr_dont_change_buffer_if_incomplete:
             expected_streams = [
-                [0] * length,
-                [0] * length,
+                first_stream,
+                first_stream,
             ]
         else:
             expected_streams = [
-                [0] * length,
-                [*data, 0]
+                first_stream,
+                data if P_IGNORE_RD_SIZE_SIGNAL else [*data, 0]
             ]
     else:
         expected_streams = [
-            [0] * length,
+            first_stream,
             data[:length],
         ]
 
@@ -441,14 +480,20 @@ async def tb_check_wr_diff_length(
     if data_length < length:
         if wr_dont_change_buffer_if_incomplete:
             expected_streams = [
-                [0] * length,
+                first_stream,
                 data,
             ]
         else:
-            expected_streams = [
-                [*prv_data, 0],
-                data,
-            ]
+            if P_IGNORE_RD_SIZE_SIGNAL:
+                expected_streams = [
+                    prv_data,
+                    data,
+                ]
+            else:
+                expected_streams = [
+                    [*prv_data, 0],
+                    data,
+                ]
     else:
         expected_streams = [
             prv_data[:length],

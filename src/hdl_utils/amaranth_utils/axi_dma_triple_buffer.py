@@ -5,6 +5,10 @@ from hdl_utils.amaranth_utils.interfaces.axi4_stream import AXI4StreamSignature
 from hdl_utils.amaranth_utils.axi_dma import AxiDma
 
 
+def at_least_one(signal: Signal):
+    return Mux(signal == 0, 1, signal)
+
+
 class AXIDmaTripleBuffer(Elaboratable):
     def __init__(
         self,
@@ -12,11 +16,15 @@ class AXIDmaTripleBuffer(Elaboratable):
         data_w: int = 128,
         user_w: int = 0,
         burst_len: int = 256,
+        ignore_rd_size_signal: bool = False,
+        init_rd_size: int = None,
     ):
         self.addr_w = addr_w
         self.data_w = data_w
         self.user_w = user_w
         self.burst_len = burst_len
+        self.ignore_rd_size_signal = ignore_rd_size_signal
+        self.init_rd_size = init_rd_size or burst_len
 
         # Modules
         self.axi_dma = AxiDma(
@@ -86,13 +94,18 @@ class AXIDmaTripleBuffer(Elaboratable):
         rd_buff_id = Signal(2, init=init_last_wr_buff_id)
         last_wr_buff_id = Signal.like(2, init=init_last_wr_buff_id)
         next_wr_buff_id = Signal.like(wr_buff_id)
-        next_rd_buff_id = Signal.like(rd_buff_id)
 
-
-        wr_beats_count = Signal(32)
+        wr_beats_remaining = Signal(32)
         wr_early_tlast = Signal()
         wr_missing_tlast = Signal()
         wr_last_ok = Signal()
+
+        last_wr_beat_count = Signal(32, init=self.init_rd_size)
+        wr_beats_counter = Signal(32)
+        rd_len_beats_to_dma = Signal(32, init=self.init_rd_size)
+
+        if not self.ignore_rd_size_signal:
+            m.d.comb += rd_len_beats_to_dma.eq(at_least_one(self.rd_len_beats))
 
         m.d.comb += [
             next_wr_buff_id.eq(
@@ -102,19 +115,18 @@ class AXIDmaTripleBuffer(Elaboratable):
                     (wr_buff_id + 2) % n_buffers,
                 )
             ),
-            next_rd_buff_id.eq(last_wr_buff_id),
             self.axi_dma.wr_addr.eq(buffer_address_array[wr_buff_id]),
             self.axi_dma.rd_addr.eq(buffer_address_array[rd_buff_id]),
             self.axi_dma.wr_qos.eq(self.wr_qos),
             self.axi_dma.rd_qos.eq(self.rd_qos),
             self.axi_dma.wr_len_beats.eq(self.wr_len_beats),
-            self.axi_dma.rd_len_beats.eq(self.rd_len_beats),
+            self.axi_dma.rd_len_beats.eq(rd_len_beats_to_dma),
         ]
 
         m.d.comb += [
-            wr_early_tlast.eq(self.sink.accepted() & self.sink.tlast & (wr_beats_count != 0)),
-            wr_missing_tlast.eq(self.sink.accepted() & (~self.sink.tlast) & (wr_beats_count == 0)),
-            wr_last_ok.eq(self.sink.accepted() & self.sink.tlast & (wr_beats_count == 0)),
+            wr_early_tlast.eq(self.sink.accepted() & self.sink.tlast & (wr_beats_remaining != 0)),
+            wr_missing_tlast.eq(self.sink.accepted() & (~self.sink.tlast) & (wr_beats_remaining == 0)),
+            wr_last_ok.eq(self.sink.accepted() & self.sink.tlast & (wr_beats_remaining == 0)),
         ]
 
         def set_dma_wr_busy() -> list:
@@ -138,34 +150,54 @@ class AXIDmaTripleBuffer(Elaboratable):
             return [
                 self.axi_dma.sink.tvalid.eq(self.sink.tvalid),
                 self.axi_dma.sink.tdata.eq(self.sink.tdata),
-                self.axi_dma.sink.tlast.eq(self.sink.tlast | (wr_beats_count == 0)),
+                self.axi_dma.sink.tlast.eq(self.sink.tlast | (wr_beats_remaining == 0)),
                 self.sink.tready.eq(self.axi_dma.sink.tready),
             ]
 
         go_to_next_wr_buffer = Signal()
         go_to_next_rd_buffer = Signal()
 
+        next_wr_beats_counter = Signal.like(wr_beats_counter)
+        m.d.comb += next_wr_beats_counter.eq(
+            Mux(self.axi_dma.sink.accepted(), wr_beats_counter + 1, wr_beats_counter)
+        )
+
         def assign_next_wr_buffer() -> list:
             return [
                 last_wr_buff_id.eq(wr_buff_id),
+                last_wr_beat_count.eq(next_wr_beats_counter),
                 wr_buff_id.eq(next_wr_buff_id),
             ]
 
         def assign_next_rd_buffer() -> list:
-            return [
-                rd_buff_id.eq(next_rd_buff_id),
+            ret = [
+                rd_buff_id.eq(last_wr_buff_id),
             ]
+            if self.ignore_rd_size_signal:
+                ret += [
+                    rd_len_beats_to_dma.eq(at_least_one(last_wr_beat_count)),
+            ]
+            return ret
+
+        def assign_next_wr_buffer_and_next_rd_buffer() -> list:
+            ret = [
+                last_wr_buff_id.eq(wr_buff_id),
+                last_wr_beat_count.eq(next_wr_beats_counter),
+                wr_buff_id.eq(rd_buff_id),
+                rd_buff_id.eq(wr_buff_id),
+            ]
+            if self.ignore_rd_size_signal:
+                ret += [
+                    rd_len_beats_to_dma.eq(at_least_one(next_wr_beats_counter)),
+                ]
+            return ret
 
         with m.If(go_to_next_wr_buffer & ~go_to_next_rd_buffer):
             m.d.sync += assign_next_wr_buffer()
         with m.Elif((~go_to_next_wr_buffer) & go_to_next_rd_buffer):
             m.d.sync += assign_next_rd_buffer()
         with m.Elif(go_to_next_wr_buffer & go_to_next_rd_buffer):
-            m.d.sync += [
-                last_wr_buff_id.eq(wr_buff_id),
-                wr_buff_id.eq(rd_buff_id),
-                rd_buff_id.eq(wr_buff_id),
-            ]
+            m.d.sync += assign_next_wr_buffer_and_next_rd_buffer()
 
         with m.FSM() as fsm_wr:
 
@@ -174,6 +206,7 @@ class AXIDmaTripleBuffer(Elaboratable):
                 m.d.comb += disconnect_sink()
                 m.d.comb += go_to_next_wr_buffer.eq(0)
                 m.d.sync += last_wr_buff_id.eq(init_last_wr_buff_id)
+                m.d.sync += last_wr_beat_count.eq(self.init_rd_size),
                 m.d.sync += wr_buff_id.eq(init_wr_buff_id)
                 m.next = "WR_CONFIG"
 
@@ -182,7 +215,8 @@ class AXIDmaTripleBuffer(Elaboratable):
                 m.d.comb += disconnect_sink()
                 m.d.comb += go_to_next_wr_buffer.eq(0)
                 with m.If(self.axi_dma.wr_start & self.axi_dma.wr_ack):
-                    m.d.sync += wr_beats_count.eq(self.wr_len_beats - 1)
+                    m.d.sync += wr_beats_remaining.eq(self.wr_len_beats - 1)
+                    m.d.sync += wr_beats_counter.eq(0)
                     m.next = "WR_RUNNING"
 
             with m.State("WR_RUNNING"):
@@ -193,8 +227,11 @@ class AXIDmaTripleBuffer(Elaboratable):
                     | (wr_last_ok)
                 )
 
-                with m.If(self.sink.accepted() & (wr_beats_count > 0)):
-                    m.d.sync += wr_beats_count.eq(wr_beats_count - 1)
+                with m.If(self.sink.accepted()):
+                    m.d.sync += wr_beats_counter.eq(next_wr_beats_counter)
+
+                with m.If(self.sink.accepted() & (wr_beats_remaining > 0)):
+                    m.d.sync += wr_beats_remaining.eq(wr_beats_remaining - 1)
 
                 with m.If(wr_early_tlast | wr_last_ok):
                     m.next = "WR_CONFIG"
@@ -226,6 +263,8 @@ class AXIDmaTripleBuffer(Elaboratable):
                 m.d.comb += disconnect_source()
                 m.d.comb += go_to_next_rd_buffer.eq(0)
                 m.d.sync += rd_buff_id.eq(init_last_wr_buff_id)
+                if self.ignore_rd_size_signal:
+                    m.d.sync += rd_len_beats_to_dma.eq(self.init_rd_size)
                 m.next = "RD_CONFIG"
 
             with m.State("RD_CONFIG"):
