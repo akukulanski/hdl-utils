@@ -24,6 +24,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             assert len(iface.tvalid) == 1
             assert len(iface.tready) == 1
             assert len(iface.tlast) == 1
+            assert iface.tkeep.init == 2**(data_w // 8) - 1
 
         m = Module()
         wiring.connect(m, s_axis.as_master(), m_axis.as_slave())

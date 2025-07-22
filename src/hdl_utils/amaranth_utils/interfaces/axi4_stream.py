@@ -28,7 +28,7 @@ class AXI4StreamSignature(wiring.Signature):
             "tlast": Out(1),
             "tdata": Out(data_w),
             "tuser": Out(user_w),
-            "tkeep": Out(data_w // 8),
+            "tkeep": Out(data_w // 8, init=2**(data_w // 8) - 1),
         }
         if user_w == 0:
             del layout['tuser']
