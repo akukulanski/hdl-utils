@@ -217,6 +217,25 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
 
+    @pytest.mark.parametrize('data_w,user_w', [(8, 2)])
+    def test_axi_stream_skid_buffer(self, data_w: int, user_w: int):
+        from hdl_utils.amaranth_utils.skid_buffer import AXISkidBuffer
+
+        core = AXISkidBuffer(
+            data_w=data_w,
+            user_w=user_w,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_stream_pass_through'
+        vcd_file = f'./tb_axi_stream_skid_buffer_{data_w}_{user_w}.vcd'
+        env = {
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+            'P_HAS_TKEEP': str(int(bool(hasattr(core.sink, 'tkeep')))),
+            'P_TEST_LENGTH': str(32),
+        }
+        self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
+
     @pytest.mark.parametrize(
         'DWI,DWO,UWI',
         [
