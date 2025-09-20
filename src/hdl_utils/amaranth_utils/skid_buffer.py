@@ -198,12 +198,7 @@ class AXISkidBufferWrapper(Elaboratable):
                 user_w=user_w,
                 no_tkeep=no_tkeep,
             ) if add_input_buffer else None
-            self.sink = AXI4StreamSignature.create_slave(
-                data_w=data_w,
-                user_w=user_w,
-                no_tkeep=no_tkeep,
-                path=['s_axis'],  # FIXME: use same as core_sink
-            ) if add_input_buffer else core_sink
+            self.sink = self.skid_buffer_in.sink if add_input_buffer else core_sink
 
         if core_source:
             data_w = len(self.core_source.tdata)
@@ -214,12 +209,7 @@ class AXISkidBufferWrapper(Elaboratable):
                 user_w=user_w,
                 no_tkeep=no_tkeep,
             ) if add_output_buffer else None
-            self.source = AXI4StreamSignature.create_master(
-                data_w=data_w,
-                user_w=user_w,
-                no_tkeep=no_tkeep,
-                path=['m_axis'],  # FIXME: use same as core_source
-            ) if add_output_buffer else core_source
+            self.source = self.skid_buffer_out.source if add_output_buffer else core_source
 
     def get_ports(self) -> list:
         ports = []
@@ -245,13 +235,11 @@ class AXISkidBufferWrapper(Elaboratable):
 
         if self.skid_buffer_in is not None:
             m.submodules.skid_buffer_in = self.skid_buffer_in
-            wiring.connect(m, self.sink.as_master(), self.skid_buffer_in.sink)
             wiring.connect(m, self.skid_buffer_in.source, self.core_sink)
 
         if self.skid_buffer_out is not None:
             m.submodules.skid_buffer_out = self.skid_buffer_out
             wiring.connect(m, self.core_source, self.skid_buffer_out.sink)
-            wiring.connect(m, self.skid_buffer_out.source, self.source.as_slave())
 
         return m
 

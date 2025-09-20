@@ -157,13 +157,23 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
     ])
     def test_fast_clk_axi_stream_fifo(self, data_w: int, user_w: int, depth: int, max_fifo_depth: int):
         from hdl_utils.amaranth_utils.axi_stream_fifo import FastClkAXIStreamFIFO
-
+        from hdl_utils.amaranth_utils.skid_buffer import AXISkidBuffer
+        import math
+        n_fifos = int(math.ceil(depth / max_fifo_depth))
         core = FastClkAXIStreamFIFO(
             data_w=data_w,
             user_w=user_w,
             depth=depth,
             max_fifo_depth=max_fifo_depth,
         )
+        assert len(core.fifos) == n_fifos
+        for i in range(n_fifos - 1):
+            assert isinstance(core.fifos[i].skid_buffer_in, AXISkidBuffer)
+            assert getattr(core.fifos[i], 'skid_buffer_out') is None
+        assert isinstance(core.fifos[-1].skid_buffer_in, AXISkidBuffer)
+        assert isinstance(core.fifos[-1].skid_buffer_out, AXISkidBuffer)
+        assert core.sink is core.fifos[0].skid_buffer_in.sink
+        assert core.source is core.fifos[-1].skid_buffer_out.source
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_pass_through'
         vcd_file = f'./tb_fast_clk_axi_stream_fifo_{data_w}_{user_w}_{depth}_{max_fifo_depth}.vcd'

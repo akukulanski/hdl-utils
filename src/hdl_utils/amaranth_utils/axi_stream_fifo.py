@@ -78,33 +78,31 @@ class FastClkAXIStreamFIFO(Elaboratable):
     """
 
     def __init__(self, data_w: int, user_w: int, depth: int, max_fifo_depth: int = 4096):
-        self.data_w = data_w
-        self.user_w = user_w
-        self.depth = depth
+        self.total_depth = depth
         self.max_fifo_depth = max_fifo_depth
-        self.fifos = []
-        remaining_depth = depth
-        while remaining_depth > 0:
-            this_fifo_depth = min(remaining_depth, max_fifo_depth)
-            self.fifos.append(AXIStreamFIFO(data_w=data_w, user_w=user_w, depth=this_fifo_depth))
-            remaining_depth -= this_fifo_depth
-        assert len(self.fifos) == int(math.ceil(depth / max_fifo_depth)), f'{len(self.fifos)} == {int(math.ceil(depth / max_fifo_depth))}'
-        assert all([f.fifo.depth == max_fifo_depth for f in self.fifos[:-1]])
-        assert sum([f.fifo.depth for f in self.fifos]) == depth
-        self.skid_buffers = [
-            AXISkidBuffer(data_w=data_w, user_w=user_w)
-            for _ in range(len(self.fifos) + 1)
+        fifos_depth = []
+        while sum(fifos_depth) < depth:
+            fifos_depth.append(min(depth - sum(fifos_depth), max_fifo_depth))
+        assert sum(fifos_depth) == depth, f'{sum(fifos_depth)} != {depth}'
+
+        self._fifos = [
+            AXIStreamFIFO(data_w=data_w, user_w=user_w, depth=this_fifo_depth)
+            for this_fifo_depth in fifos_depth
         ]
-        self.sink = AXI4StreamSignature.create_slave(
-            data_w=data_w,
-            user_w=user_w,
-            path=[f's_axis'],
-        )
-        self.source = AXI4StreamSignature.create_master(
-            data_w=data_w,
-            user_w=user_w,
-            path=['m_axis'],
-        )
+        self.fifos = [
+            AXISkidBuffer.wrap_core(
+                core=fifo,
+                add_input_buffer=True,
+                add_output_buffer=(i == len(self._fifos) - 1),
+                core_sink=fifo.sink,
+                core_source=fifo.source,
+            )
+            for i, fifo in enumerate(self._fifos)
+        ]
+        assert all([f.wrapped_core.fifo.depth <= max_fifo_depth for f in self.fifos])
+        assert sum([f.wrapped_core.fifo.depth for f in self.fifos]) == depth
+        self.sink = self.fifos[0].sink
+        self.source = self.fifos[-1].source
 
     def get_ports(self):
         ports = []
@@ -114,19 +112,13 @@ class FastClkAXIStreamFIFO(Elaboratable):
 
     def elaborate(self, platform):
         m = Module()
-        for i in range(len(self.fifos)):
-            skid_buffer_core = self.skid_buffers[i]
-            fifo_core = self.fifos[i]
-            m.submodules[f'skid_buffer_{i:02d}'] = skid_buffer_core
-            m.submodules[f'fifo_{i:02d}'] = fifo_core
-            wiring.connect(m, skid_buffer_core.source, fifo_core.sink)
-            next_skid_buffer_core = self.skid_buffers[i + 1]
-            wiring.connect(m, fifo_core.source, next_skid_buffer_core.sink)
 
-        last_skid_buffer_i = len(self.skid_buffers) - 1
-        m.submodules[f'skid_buffer_{last_skid_buffer_i:02d}'] = self.skid_buffers[-1]
-        wiring.connect(m, self.sink.as_master(), self.skid_buffers[0].sink)
-        wiring.connect(m, self.skid_buffers[-1].source, self.source.as_slave())
+        for i, fifo in enumerate(self.fifos):
+            m.submodules[f'fifo_{i:02d}'] = fifo
+
+        for prv, nxt in zip(self.fifos[:-1], self.fifos[1:]):
+            wiring.connect(m, prv.source, nxt.sink)
+
         return m
 
 
