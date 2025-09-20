@@ -28,9 +28,9 @@ class Testbench:
     def __init__(self, dut):
         self.dut = dut
         self.m_axi = AXIStreamMaster(
-            entity=dut, name='s_axi_', clock=self.dut.clk)
+            entity=dut, name='s_axis_', clock=self.dut.clk)
         self.s_axi = AXIStreamSlave(
-            entity=dut, name='m_axi_', clock=self.dut.clk)
+            entity=dut, name='m_axis_', clock=self.dut.clk)
 
     @property
     def data_width_in(self):
@@ -83,12 +83,12 @@ class Testbench:
         signal.value = 1 if signal_name.endswith('n') else 0
 
     def _init_signals(self):
-        self.dut.s_axi__tvalid.value = 0
-        self.dut.s_axi__tlast.value = 0
-        self.dut.s_axi__tkeep.value = 0
-        self.dut.s_axi__tuser.value = 0
-        self.dut.s_axi__tdata.value = 0
-        self.dut.m_axi__tready.value = 0
+        self.dut.s_axis__tvalid.value = 0
+        self.dut.s_axis__tlast.value = 0
+        self.dut.s_axis__tkeep.value = 0
+        self.dut.s_axis__tuser.value = 0
+        self.dut.s_axis__tdata.value = 0
+        self.dut.m_axis__tready.value = 0
 
     async def init_test(self):
         # Start clock
@@ -106,20 +106,20 @@ class Testbench:
 # @cocotb.test()
 async def tb_check_signals_length(dut):
     assert P_DWO % P_DWI == 0
-    assert len(dut.s_axi__tvalid) == 1
-    assert len(dut.s_axi__tready) == 1
-    assert len(dut.s_axi__tlast) == 1
-    assert len(dut.s_axi__tkeep) == P_DWI // 8
+    assert len(dut.s_axis__tvalid) == 1
+    assert len(dut.s_axis__tready) == 1
+    assert len(dut.s_axis__tlast) == 1
+    assert len(dut.s_axis__tkeep) == P_DWI // 8
     if P_UWI > 0:  # can\'t create zero-length signal
-        assert len(dut.s_axi__tuser) == P_UWI
-    assert len(dut.s_axi__tdata) == P_DWI
-    assert len(dut.m_axi__tvalid) == 1
-    assert len(dut.m_axi__tready) == 1
-    assert len(dut.m_axi__tlast) == 1
-    assert len(dut.m_axi__tkeep) == P_DWO // 8
+        assert len(dut.s_axis__tuser) == P_UWI
+    assert len(dut.s_axis__tdata) == P_DWI
+    assert len(dut.m_axis__tvalid) == 1
+    assert len(dut.m_axis__tready) == 1
+    assert len(dut.m_axis__tlast) == 1
+    assert len(dut.m_axis__tkeep) == P_DWO // 8
     if P_UWI > 0:  # can\'t create zero-length signal
-        assert len(dut.m_axi__tuser) == P_UWI / (P_DWI / P_DWO)
-    assert len(dut.m_axi__tdata) == P_DWO
+        assert len(dut.m_axis__tuser) == P_UWI / (P_DWI / P_DWO)
+    assert len(dut.m_axis__tdata) == P_DWO
 
 
 async def run_and_check_result(dut, tb, data_in, user_in, keep_in,

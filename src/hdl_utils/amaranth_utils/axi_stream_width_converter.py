@@ -21,12 +21,12 @@ class AXIStreamWidthConverterDown(Elaboratable):
         self.sink = AXI4StreamSignature.create_slave(
             data_w=data_w_i,
             user_w=user_w_i,
-            path=['s_axi'],
+            path=['s_axis'],
         )
         self.source = AXI4StreamSignature.create_master(
             data_w=data_w_o,
             user_w=user_w_o,
-            path=['m_axi'],
+            path=['m_axis'],
         )
 
     def get_ports(self):
@@ -158,12 +158,12 @@ class AXIStreamWidthConverterUp(Elaboratable):
         self.sink = AXI4StreamSignature.create_slave(
             data_w=data_w_i,
             user_w=user_w_i,
-            path=['s_axi'],
+            path=['s_axis'],
         )
         self.source = AXI4StreamSignature.create_master(
             data_w=data_w_o,
             user_w=user_w_o,
-            path=['m_axi'],
+            path=['m_axis'],
         )
 
     def get_ports(self):

@@ -191,7 +191,7 @@ class AXISkidBufferWrapper(Elaboratable):
 
         if core_sink:
             data_w = len(self.core_sink.tdata)
-            user_w = len(self.core_sink.tuser)
+            user_w = len(self.core_sink.tuser) if hasattr(self.core_sink, 'tuser') else 0
             no_tkeep = not hasattr(self.core_sink, 'tkeep')
             self.skid_buffer_in = AXISkidBuffer(
                 data_w=data_w,
@@ -202,7 +202,7 @@ class AXISkidBufferWrapper(Elaboratable):
 
         if core_source:
             data_w = len(self.core_source.tdata)
-            user_w = len(self.core_source.tuser)
+            user_w = len(self.core_source.tuser) if hasattr(self.core_source, 'tuser') else 0
             no_tkeep = not hasattr(self.core_source, 'tkeep')
             self.skid_buffer_out = AXISkidBuffer(
                 data_w=data_w,

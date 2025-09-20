@@ -287,13 +287,14 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
 
     @pytest.mark.parametrize(
-        'DWI,DWO,UWI',
+        'DWI,DWO,UWI,add_skid_buffers',
         [
-            (24, 8, 3),
-            (48, 24, 4),
+            (24, 8, 3, False),
+            (48, 24, 4, False),
+            (24, 8, 3, True),
         ]
     )
-    def test_width_converter_down(self, DWI, DWO, UWI):
+    def test_width_converter_down(self, DWI, DWO, UWI, add_skid_buffers):
         from hdl_utils.amaranth_utils.axi_stream_width_converter import \
             AXIStreamWidthConverterDown
 
@@ -303,8 +304,21 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             user_w_i=UWI,
         )
         ports = core.get_ports()
+        base_name = f'tb_axi_stream_width_converter_down_{DWI}_{DWO}_{UWI}'
+        if add_skid_buffers:
+            from hdl_utils.amaranth_utils.skid_buffer import AXISkidBuffer
+            core = AXISkidBuffer.wrap_core(
+                core=core,
+                add_input_buffer=True,
+                add_output_buffer=True,
+                core_sink=core.sink,
+                core_source=core.source,
+            )
+            ports = core.get_ports()
+            base_name += '_sb'
+
         test_module = 'tb.tb_axi_stream_width_converter_down'
-        vcd_file = f'./tb_axi_stream_width_converter_down_{DWI}_{DWO}_{UWI}.vcd'
+        vcd_file = f'./{base_name}.vcd'
         env = {
             'P_DWI': str(DWI),
             'P_DWO': str(DWO),
@@ -333,13 +347,14 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             )
 
     @pytest.mark.parametrize(
-        'DWI,DWO,UWI',
+        'DWI,DWO,UWI,add_skid_buffers',
         [
-            (8, 24, 1),
-            (24, 48, 2),
+            (8, 24, 1, False),
+            (24, 48, 2, False),
+            (24, 48, 2, True),
         ]
     )
-    def test_width_converter_up(self, DWI, DWO, UWI):
+    def test_width_converter_up(self, DWI, DWO, UWI, add_skid_buffers):
         from hdl_utils.amaranth_utils.axi_stream_width_converter import \
             AXIStreamWidthConverterUp
 
@@ -349,8 +364,20 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             user_w_i=UWI,
         )
         ports = core.get_ports()
+        base_name =  f'tb_axi_stream_width_converter_up_{DWI}_{DWO}_{UWI}'
+        if add_skid_buffers:
+            from hdl_utils.amaranth_utils.skid_buffer import AXISkidBuffer
+            core = AXISkidBuffer.wrap_core(
+                core=core,
+                add_input_buffer=True,
+                add_output_buffer=True,
+                core_sink=core.sink,
+                core_source=core.source,
+            )
+            ports = core.get_ports()
+            base_name += '_sb'
         test_module = 'tb.tb_axi_stream_width_converter_up'
-        vcd_file = f'./tb_axi_stream_width_converter_up_{DWI}_{DWO}_{UWI}.vcd'
+        vcd_file = f'./{base_name}.vcd'
         env = {
             'P_DWI': str(DWI),
             'P_DWO': str(DWO),
