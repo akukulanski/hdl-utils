@@ -139,12 +139,14 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             depth=depth,
         )
         ports = core.get_ports()
-        test_module = 'tb.tb_axi_stream_fifo'
+        test_module = 'tb.tb_axi_stream_pass_through'
         vcd_file = f'./tb_axi_stream_fifo_{data_w}_{user_w}_{depth}.vcd'
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
-            'P_DEPTH': str(depth)
+            'P_DEPTH': str(depth),
+            'P_HAS_TKEEP': str(int(bool(hasattr(core.sink, 'tkeep')))),
+            'P_TEST_LENGTH': str(32 * depth),
         }
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
@@ -163,13 +165,15 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             max_fifo_depth=max_fifo_depth,
         )
         ports = core.get_ports()
-        test_module = 'tb.tb_axi_stream_fifo'
+        test_module = 'tb.tb_axi_stream_pass_through'
         vcd_file = f'./tb_fast_clk_axi_stream_fifo_{data_w}_{user_w}_{depth}_{max_fifo_depth}.vcd'
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
             'P_DEPTH': str(depth),
             'P_MAX_FIFO_DEPTH': str(max_fifo_depth),
+            'P_HAS_TKEEP': str(int(bool(hasattr(core.sink, 'tkeep')))),
+            'P_TEST_LENGTH': str(32 * depth),
         }
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
 

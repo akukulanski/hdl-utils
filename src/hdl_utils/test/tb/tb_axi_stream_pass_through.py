@@ -16,7 +16,8 @@ from hdl_utils.cocotb_utils.buses.axi_stream import (
 
 P_DATA_W = int(os.environ['P_DATA_W'])
 P_USER_W = int(os.environ['P_USER_W'])
-P_DEPTH = int(os.environ['P_DEPTH'])
+P_HAS_TKEEP = bool(int(os.environ.get('P_HAS_TKEEP', True)))
+P_TEST_LENGTH = int(os.environ['P_TEST_LENGTH'])
 
 
 class Testbench:
@@ -78,13 +79,15 @@ async def check_ports(dut):
     assert len(dut.s_axis__tlast) == 1
     assert len(dut.s_axis__tdata) == P_DATA_W
     assert len(dut.s_axis__tuser) == P_USER_W
-    assert len(dut.s_axis__tkeep) == P_DATA_W // 8
+    if P_HAS_TKEEP:
+        assert len(dut.s_axis__tkeep) == P_DATA_W // 8
     assert len(dut.m_axis__tvalid) == 1
     assert len(dut.m_axis__tready) == 1
     assert len(dut.m_axis__tlast) == 1
     assert len(dut.m_axis__tdata) == P_DATA_W
     assert len(dut.m_axis__tuser) == P_USER_W
-    assert len(dut.m_axis__tkeep) == P_DATA_W // 8
+    if P_HAS_TKEEP:
+        assert len(dut.m_axis__tkeep) == P_DATA_W // 8
     assert len(dut.clk) == 1
     if hasattr(dut, 'rst'):
         assert len(dut.rst) == 1
@@ -94,13 +97,13 @@ async def check_ports(dut):
 
 async def tb_check_core(
     dut,
+    test_length: int,
     burps_in: bool = False,
     burps_out: bool = False,
     dummy: int = 0
 ):
     tb = Testbench(dut)
 
-    test_length = 32 * P_DEPTH
     timeout_ns = 100 * test_length * tb.period_ns
     timeout_unit = 'ns'
 
@@ -116,7 +119,7 @@ async def tb_check_core(
             tb.master.write(
                 data=_getrandbits(len(tb.master.bus.tdata), test_length),
                 user=_getrandbits(len(tb.master.bus.tuser), test_length),
-                keep=_getrandbits(len(tb.master.bus.tkeep), test_length),
+                keep=_getrandbits(len(tb.master.bus.tkeep), test_length) if P_HAS_TKEEP else None,
                 burps=burps_in,
                 force_sync_clk_edge=True,
             ),
@@ -167,18 +170,20 @@ async def tb_check_core(
         f'{extract_capture_user(stream_wr)} != '
         f'{extract_capture_user(stream_rd)}'
     )
-    assert (
-        extract_capture_keep(stream_wr) ==
-        extract_capture_keep(stream_rd)
-    ), (
-        f'tkeep does not match: '
-        f'{extract_capture_keep(stream_wr)} != '
-        f'{extract_capture_keep(stream_rd)}'
-    )
+    if P_HAS_TKEEP:
+        assert (
+            extract_capture_keep(stream_wr) ==
+            extract_capture_keep(stream_rd)
+        ), (
+            f'tkeep does not match: '
+            f'{extract_capture_keep(stream_wr)} != '
+            f'{extract_capture_keep(stream_rd)}'
+        )
 
 
 tf_check_core = TestFactory(test_function=tb_check_core)
 tf_check_core.add_option('burps_in',  [False, True])
 tf_check_core.add_option('burps_out', [False, True])
+tf_check_core.add_option('test_length', [P_TEST_LENGTH])
 tf_check_core.add_option('dummy', [0] * 3)
 tf_check_core.generate_tests()
