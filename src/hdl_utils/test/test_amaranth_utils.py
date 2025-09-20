@@ -129,7 +129,6 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
 
-    @pytest.mark.skip(reason='Testbench Not Implemented')
     @pytest.mark.parametrize('data_w,user_w,depth', [(8, 2, 16)])
     def test_axi_stream_fifo(self, data_w: int, user_w: int, depth: int):
         from hdl_utils.amaranth_utils.axi_stream_fifo import AXIStreamFIFO
