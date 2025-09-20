@@ -149,6 +149,30 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
 
+    @pytest.mark.parametrize('data_w,user_w,depth,max_fifo_depth', [
+        (8, 2, 16, 8),
+        (8, 2, 16, 7),
+    ])
+    def test_fast_clk_axi_stream_fifo(self, data_w: int, user_w: int, depth: int, max_fifo_depth: int):
+        from hdl_utils.amaranth_utils.axi_stream_fifo import FastClkAXIStreamFIFO
+
+        core = FastClkAXIStreamFIFO(
+            data_w=data_w,
+            user_w=user_w,
+            depth=depth,
+            max_fifo_depth=max_fifo_depth,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_stream_fifo'
+        vcd_file = f'./tb_fast_clk_axi_stream_fifo_{data_w}_{user_w}_{depth}_{max_fifo_depth}.vcd'
+        env = {
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+            'P_DEPTH': str(depth),
+            'P_MAX_FIFO_DEPTH': str(max_fifo_depth),
+        }
+        self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
+
     @pytest.mark.parametrize('data_w,user_w,depth,low_reset', [
         (8, 2, 8, False),
         (8, 2, 8, True),

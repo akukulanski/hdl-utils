@@ -1,7 +1,10 @@
 from amaranth import Elaboratable, Module, ResetSignal
 from amaranth.lib.fifo import SyncFIFOBuffered, AsyncFIFO
+from amaranth.lib import wiring
+import math
 
 from hdl_utils.amaranth_utils.interfaces.axi4_stream import AXI4StreamSignature
+from hdl_utils.amaranth_utils.skid_buffer import AXISkidBuffer
 
 
 class AXIStreamFIFO(Elaboratable):
@@ -64,6 +67,64 @@ class AXIStreamFIFO(Elaboratable):
             w_domain=w_domain,
             **kwargs
         )
+
+
+class FastClkAXIStreamFIFO(Elaboratable):
+    """Split AXI Stream FIFO into multiple FIFOs,
+    and include Skid Buffers at the start, at the end, and between each FIFO.
+    """
+
+    def __init__(self, data_w: int, user_w: int, depth: int, max_fifo_depth: int = 4096):
+        self.data_w = data_w
+        self.user_w = user_w
+        self.depth = depth
+        self.max_fifo_depth = max_fifo_depth
+        self.fifos = []
+        remaining_depth = depth
+        while remaining_depth > 0:
+            this_fifo_depth = min(remaining_depth, max_fifo_depth)
+            self.fifos.append(AXIStreamFIFO(data_w=data_w, user_w=user_w, depth=this_fifo_depth))
+            remaining_depth -= this_fifo_depth
+        assert len(self.fifos) == int(math.ceil(depth / max_fifo_depth)), f'{len(self.fifos)} == {int(math.ceil(depth / max_fifo_depth))}'
+        assert all([f.fifo.depth == max_fifo_depth for f in self.fifos[:-1]])
+        assert sum([f.fifo.depth for f in self.fifos]) == depth
+        self.skid_buffers = [
+            AXISkidBuffer(data_w=data_w, user_w=user_w)
+            for _ in range(len(self.fifos) + 1)
+        ]
+        self.sink = AXI4StreamSignature.create_slave(
+            data_w=data_w,
+            user_w=user_w,
+            path=[f's_axis'],
+        )
+        self.source = AXI4StreamSignature.create_master(
+            data_w=data_w,
+            user_w=user_w,
+            path=['m_axis'],
+        )
+
+    def get_ports(self):
+        ports = []
+        ports += self.sink.extract_signals()
+        ports += self.source.extract_signals()
+        return ports
+
+    def elaborate(self, platform):
+        m = Module()
+        for i in range(len(self.fifos)):
+            skid_buffer_core = self.skid_buffers[i]
+            fifo_core = self.fifos[i]
+            m.submodules[f'skid_buffer_{i:02d}'] = skid_buffer_core
+            m.submodules[f'fifo_{i:02d}'] = fifo_core
+            wiring.connect(m, skid_buffer_core.source, fifo_core.sink)
+            next_skid_buffer_core = self.skid_buffers[i + 1]
+            wiring.connect(m, fifo_core.source, next_skid_buffer_core.sink)
+
+        last_skid_buffer_i = len(self.skid_buffers) - 1
+        m.submodules[f'skid_buffer_{last_skid_buffer_i:02d}'] = self.skid_buffers[-1]
+        wiring.connect(m, self.sink.as_master(), self.skid_buffers[0].sink)
+        wiring.connect(m, self.skid_buffers[-1].source, self.source.as_slave())
+        return m
 
 
 def parse_args(sys_args=None):
