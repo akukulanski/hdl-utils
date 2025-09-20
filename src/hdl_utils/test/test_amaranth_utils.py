@@ -236,6 +236,46 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         }
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
 
+
+    @pytest.mark.parametrize('data_w,user_w,no_tkeep,add_input_buffer,add_output_buffer', [
+        (8, 2, False, False, False),
+        (8, 2, False, False, True),
+        (8, 2, False, True, False),
+        (8, 2, False, True, True),
+        (8, 2, True, False, False),
+        (8, 2, True, False, True),
+        (8, 2, True, True, False),
+        (8, 2, True, True, True),
+    ])
+    def test_axi_stream_skid_buffer_wrapper(self, data_w: int, user_w: int,
+                                            no_tkeep: bool,
+                                            add_input_buffer: bool,
+                                            add_output_buffer: bool):
+        from hdl_utils.amaranth_utils.skid_buffer import AXISkidBuffer
+        from hdl_utils.amaranth_utils.axi_stream_fifo import AXIStreamFIFO
+
+        depth = 4
+        fifo_core = AXIStreamFIFO(data_w=data_w, user_w=user_w, no_tkeep=no_tkeep, depth=depth)
+        core = AXISkidBuffer.wrap_core(
+            core=fifo_core,
+            core_sink=fifo_core.sink,
+            core_source=fifo_core.source,
+            add_input_buffer=add_input_buffer,
+            add_output_buffer=add_output_buffer,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_stream_pass_through'
+        vcd_file = f'./tb_skid_buffer_wrapper_{data_w}_{user_w}_{add_input_buffer}_{add_output_buffer}.vcd'
+        env = {
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+            'P_HAS_TKEEP': str(int(bool(not no_tkeep))),
+            'P_TEST_LENGTH': str(4 * 32),
+            'P_ADD_INPUT_BUFFER': str(int(bool(add_input_buffer))),
+            'P_ADD_INPUT_BUFFER': str(int(bool(add_output_buffer))),
+        }
+        self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
+
     @pytest.mark.parametrize(
         'DWI,DWO,UWI',
         [

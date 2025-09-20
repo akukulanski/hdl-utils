@@ -15,17 +15,20 @@ class AXIStreamFIFO(Elaboratable):
         user_w: int,
         depth: int,
         fifo_cls: Elaboratable = SyncFIFOBuffered,
+        no_tkeep: bool = False,
         *args,
         **kwargs
     ):
         self.sink = AXI4StreamSignature.create_slave(
             data_w=data_w,
             user_w=user_w,
+            no_tkeep=no_tkeep,
             path=['s_axis'],
         )
         self.source = AXI4StreamSignature.create_master(
             data_w=data_w,
             user_w=user_w,
+            no_tkeep=no_tkeep,
             path=['m_axis'],
         )
         total_width = len(self.sink.flatten())

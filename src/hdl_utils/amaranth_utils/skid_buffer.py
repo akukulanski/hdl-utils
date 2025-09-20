@@ -1,4 +1,5 @@
 from amaranth import Elaboratable, Module, ResetSignal, Signal
+from amaranth.lib import wiring
 
 from hdl_utils.amaranth_utils.interfaces.axi4_stream import AXI4StreamSignature
 
@@ -96,15 +97,18 @@ class AXISkidBuffer(Elaboratable):
         self,
         data_w: int,
         user_w: int,
+        no_tkeep: bool = False,
     ):
         self.sink = AXI4StreamSignature.create_slave(
             data_w=data_w,
             user_w=user_w,
+            no_tkeep=no_tkeep,
             path=['s_axis'],
         )
         self.source = AXI4StreamSignature.create_master(
             data_w=data_w,
             user_w=user_w,
+            no_tkeep=no_tkeep,
             path=['m_axis'],
         )
         total_width = len(self.sink.flatten())
@@ -122,6 +126,133 @@ class AXISkidBuffer(Elaboratable):
         m.d.comb += self.source.tvalid.eq(skid_buffer.source_valid)
         m.d.comb += self.source.assign_from_flat(skid_buffer.source_data)
         m.d.comb += skid_buffer.source_ready.eq(self.source.tready)
+        return m
+
+    @classmethod
+    def wrap_core(
+        cls,
+        core: Elaboratable,
+        add_input_buffer: bool = True,
+        add_output_buffer: bool = True,
+        core_sink: Signal = None,
+        core_source: Signal = None,
+    ) -> Elaboratable:
+        return AXISkidBufferWrapper(
+            core=core,
+            add_input_buffer=add_input_buffer,
+            add_output_buffer=add_output_buffer,
+            core_sink=core_sink,
+            core_source=core_source,
+        )
+
+
+def object_in_list(obj, l: list) -> bool:
+    """Same as x in list but for signals or other objects that override the "==" where
+    native "in" doesn't work.
+
+    Example of what does NOT work natively:
+        a, b, c = [Signal() for _ in range(3)]
+        my_list = [a, b]
+        assert a in my_list
+        assert b in my_list
+        assert c not in my_list
+
+    Example of what works:
+        a, b, c = [Signal() for _ in range(3)]
+        my_list = [a, b]
+        assert object_in_list(a, my_list)
+        assert object_in_list(b, my_list)
+        assert not object_in_list(c, my_list)
+    """
+    return any([obj is y for y in l])
+
+
+
+class AXISkidBufferWrapper(Elaboratable):
+    def __init__(
+        self,
+        core: Elaboratable,
+        add_input_buffer: bool = True,
+        add_output_buffer: bool = True,
+        core_sink: Signal = None,
+        core_source: Signal = None,
+    ):
+        assert core_sink is not None or not add_input_buffer, (
+            'add_input_buffer is True, but no sink interface was specified'
+        )
+        assert core_source is not None or not add_output_buffer, (
+            'add_output_buffer is True, but no source interface was specified'
+        )
+        self.wrapped_core = core
+        self.add_input_buffer = add_input_buffer
+        self.add_output_buffer = add_output_buffer
+        self.core_sink = core_sink
+        self.core_source = core_source
+
+        if core_sink:
+            data_w = len(self.core_sink.tdata)
+            user_w = len(self.core_sink.tuser)
+            no_tkeep = not hasattr(self.core_sink, 'tkeep')
+            self.skid_buffer_in = AXISkidBuffer(
+                data_w=data_w,
+                user_w=user_w,
+                no_tkeep=no_tkeep,
+            ) if add_input_buffer else None
+            self.sink = AXI4StreamSignature.create_slave(
+                data_w=data_w,
+                user_w=user_w,
+                no_tkeep=no_tkeep,
+                path=['s_axis'],  # FIXME: use same as core_sink
+            ) if add_input_buffer else core_sink
+
+        if core_source:
+            data_w = len(self.core_source.tdata)
+            user_w = len(self.core_source.tuser)
+            no_tkeep = not hasattr(self.core_source, 'tkeep')
+            self.skid_buffer_out = AXISkidBuffer(
+                data_w=data_w,
+                user_w=user_w,
+                no_tkeep=no_tkeep,
+            ) if add_output_buffer else None
+            self.source = AXI4StreamSignature.create_master(
+                data_w=data_w,
+                user_w=user_w,
+                no_tkeep=no_tkeep,
+                path=['m_axis'],  # FIXME: use same as core_source
+            ) if add_output_buffer else core_source
+
+    def get_ports(self) -> list:
+        ports = []
+        ignore_ports = []
+
+        if self.core_sink:
+            ignore_ports += self.core_sink.extract_signals()
+            ports += self.sink.extract_signals()
+
+        if self.core_source:
+            ignore_ports += self.core_source.extract_signals()
+            ports += self.source.extract_signals()
+
+        ports += [
+            p for p in self.wrapped_core.get_ports()
+            if not object_in_list(p, ignore_ports)
+        ]
+        return ports
+
+    def elaborate(self, platform):
+        m = Module()
+        m.submodules.wrapped_core = self.wrapped_core
+
+        if self.skid_buffer_in is not None:
+            m.submodules.skid_buffer_in = self.skid_buffer_in
+            wiring.connect(m, self.sink.as_master(), self.skid_buffer_in.sink)
+            wiring.connect(m, self.skid_buffer_in.source, self.core_sink)
+
+        if self.skid_buffer_out is not None:
+            m.submodules.skid_buffer_out = self.skid_buffer_out
+            wiring.connect(m, self.core_source, self.skid_buffer_out.sink)
+            wiring.connect(m, self.skid_buffer_out.source, self.source.as_slave())
+
         return m
 
 
