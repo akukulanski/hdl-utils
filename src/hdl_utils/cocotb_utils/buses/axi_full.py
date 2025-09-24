@@ -1,6 +1,6 @@
 import array
 import cocotb
-from cocotb.binary import BinaryValue
+from cocotb.types import LogicArray
 from cocotb.handle import SimHandleBase
 from cocotb.triggers import RisingEdge
 
@@ -129,13 +129,13 @@ class AXI4SlaveDriver:
                 await RisingEdge(self.clock)
                 while not self.bus.WVALID.value:
                     await RisingEdge(self.clock)
-                word = self.bus.WDATA.value
-                word.big_endian = self.big_endian
+                word: LogicArray = self.bus.WDATA.value
+                byteorder = "big" if self.big_endian else "little"
                 _burst_diff = burst_length - burst_count
                 start_addr = _awaddr + b * bytes_in_beat
                 end_addr = start_addr + bytes_in_beat
                 assert end_addr <= len(self._memory), f"out of range: {hex(end_addr)} > {hex(len(self._memory))}"
-                self._memory[start_addr:end_addr] = array.array('B', word.buff)
+                self._memory[start_addr:end_addr] = array.array('B', word.to_bytes(byteorder=byteorder))
 
             if not self.bus.WLAST.value:
                 raise AXIProtocolError('WLAST != 1 when BURST Finished')
@@ -154,7 +154,7 @@ class AXI4SlaveDriver:
             # Receive Read Address
             self.bus.ARREADY.value = 1
             await RisingEdge(self.clock)
-            while not self.bus.ARVALID.value.integer:
+            while not self.bus.ARVALID.value:
                 await RisingEdge(self.clock)
             self.bus.ARREADY.value = 0
 
@@ -167,7 +167,6 @@ class AXI4SlaveDriver:
 
             burst_length = _arlen + 1
             bytes_in_beat = self._size_to_bytes_in_beat(_arsize)
-            word = BinaryValue(n_bits=bytes_in_beat*8, bigEndian=self.big_endian)
             burst_count = burst_length
 
             # Send data burst
@@ -180,13 +179,13 @@ class AXI4SlaveDriver:
                     ((_burst_diff + 1) * bytes_in_beat)
                 assert _end <= len(self._memory), f"out of range: {hex(_end)} > {hex(len(self._memory))}"
                 word = self._memory[_st:_end]
-                word = ''.join(["{:02x}".format(x) for x in word[::-1]])
+                word = ''.join([f"{x:02x}" for x in word[::-1]])
                 # Send data beat
                 self.bus.RDATA.value = int(word, 16)
                 self.bus.RVALID.value = 1
                 self.bus.RLAST.value = 1 if (burst_count == 1) else 0
                 await RisingEdge(self.clock)
-                while not (self.bus.RREADY.value.integer):
+                while not self.bus.RREADY.value:
                     await RisingEdge(self.clock)
                 burst_count -= 1
 
