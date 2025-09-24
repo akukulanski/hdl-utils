@@ -67,7 +67,7 @@ class AXIStreamMonitorMixin:
             await RisingEdge(self.clock)
             if self.accepted():
                 self._full_monitor_current_stream.append(self._capture_current_values())
-                if self.bus.tlast.value.integer:
+                if self.bus.tlast.value:
                     self._full_monitor_streams.append(self._full_monitor_current_stream)
                     self._full_monitor_current_stream = []
 
@@ -112,7 +112,7 @@ class AXIStreamMonitorMixin:
             await RisingEdge(self.clock)
             if self.accepted():
                 self._current_data_stream.append(self.tdata_int())
-                if self.bus.tlast.value.integer:
+                if self.bus.tlast.value:
                     self._data_monitor.append(self._current_data_stream)
                     self._current_data_stream = []
 
@@ -140,25 +140,25 @@ class AXIStreamBase:
         self.clock = clock
 
     def accepted(self):
-        return bool(self.bus.tvalid.value.integer and
-                    self.bus.tready.value.integer)
+        return bool(self.bus.tvalid.value and
+                    self.bus.tready.value)
 
     def tdata_int(self):
-        return self.bus.tdata.value.integer
+        return int(self.bus.tdata.value)
 
     def tuser_int(self):
         if hasattr(self.bus, 'tuser'):
-            return self.bus.tuser.value.integer
+            return int(self.bus.tuser.value)
         return None
 
     def tkeep_int(self):
         if hasattr(self.bus, 'tkeep'):
-            return self.bus.tkeep.value.integer
+            return int(self.bus.tkeep.value)
         return None
 
     def tlast_int(self):
         if hasattr(self.bus, 'tlast'):
-            return self.bus.tlast.value.integer
+            return int(self.bus.tlast.value)
         return None
 
     def _capture_current_values(self):
@@ -206,7 +206,7 @@ class AXIStreamMasterDriver(AXIStreamBase, AXIStreamMonitorMixin):
             if keep:
                 self.bus.tkeep.value = keep
             await RisingEdge(self.clock)
-            while self.bus.tready.value.integer == 0:
+            while self.bus.tready.value == 0:
                 await RisingEdge(self.clock)
             self.bus.tvalid.value = 0
             self.bus.tlast.value = 0
@@ -301,7 +301,7 @@ class AXIStreamSlaveDriver(AXIStreamBase, AXIStreamMonitorMixin):
         async with self.rd_busy:
             self.bus.tready.value = 1
             await RisingEdge(self.clock)
-            while self.bus.tvalid.value.integer == 0:
+            while self.bus.tvalid.value == 0:
                 await RisingEdge(self.clock)
         current_values = self._capture_current_values()
         last = self.tlast_int()
@@ -362,7 +362,7 @@ class AXIStreamSlaveDriver(AXIStreamBase, AXIStreamMonitorMixin):
             async with self.rd_busy:
                 self.bus.tready.value = 1
                 await RisingEdge(self.clock)
-                while self.bus.tvalid.value.integer == 0:
+                while self.bus.tvalid.value == 0:
                     await RisingEdge(self.clock)
             self.bus.tready.value = 0
 

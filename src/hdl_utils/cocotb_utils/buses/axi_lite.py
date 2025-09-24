@@ -61,24 +61,24 @@ class AXI4LiteBase:
         self.transactions = []
 
     def aw_accepted(self):
-        return bool(self.bus.AWVALID.value.integer &
-                    self.bus.AWREADY.value.integer)
+        return bool(self.bus.AWVALID.value &
+                    self.bus.AWREADY.value)
 
     def w_accepted(self):
-        return bool(self.bus.WVALID.value.integer &
-                    self.bus.WREADY.value.integer)
+        return bool(self.bus.WVALID.value &
+                    self.bus.WREADY.value)
 
     def b_accepted(self):
-        return bool(self.bus.BVALID.value.integer &
-                    self.bus.BREADY.value.integer)
+        return bool(self.bus.BVALID.value &
+                    self.bus.BREADY.value)
 
     def ar_accepted(self):
-        return bool(self.bus.ARVALID.value.integer &
-                    self.bus.ARREADY.value.integer)
+        return bool(self.bus.ARVALID.value &
+                    self.bus.ARREADY.value)
 
     def r_accepted(self):
-        return bool(self.bus.RVALID.value.integer &
-                    self.bus.RREADY.value.integer)
+        return bool(self.bus.RVALID.value &
+                    self.bus.RREADY.value)
 
     async def run_monitor(self):
         while True:
@@ -101,19 +101,19 @@ class AXI4LiteBase:
 
     @property
     def awaddr(self):
-        return self.bus.AWADDR.value.integer
+        return int(self.bus.AWADDR.value)
 
     @property
     def wdata(self):
-        return self.bus.WDATA.value.integer
+        return int(self.bus.WDATA.value)
 
     @property
     def araddr(self):
-        return self.bus.ARADDR.value.integer
+        return int(self.bus.ARADDR.value)
 
     @property
     def rdata(self):
-        return self.bus.RDATA.value.integer
+        return int(self.bus.RDATA.value)
 
 
 class AXI4LiteMasterDriver(AXI4LiteBase):

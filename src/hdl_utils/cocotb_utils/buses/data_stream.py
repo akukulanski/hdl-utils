@@ -44,8 +44,8 @@ class DataStreamMonitorMixin:
         while True:
             await RisingEdge(self.clock)
             if self.accepted():
-                self._current_data_stream.append(self.bus.data.value.integer)
-                if self.bus.last.value.integer:
+                self._current_data_stream.append(int(self.bus.data.value))
+                if self.bus.last.value:
                     self._data_monitor.append(self._current_data_stream)
                     self._current_data_stream = []
 
@@ -80,15 +80,15 @@ class DataStreamBase:
         self.clock = clock
 
     def accepted(self):
-        return bool(self.bus.valid.value.integer and
-                    self.bus.ready.value.integer)
+        return bool(self.bus.valid.value and
+                    self.bus.ready.value)
 
     def data_int(self):
-        return self.bus.data.value.integer
+        return int(self.bus.data.value)
 
     def last_int(self):
         if hasattr(self.bus, 'last'):
-            return self.bus.last.value.integer
+            return int(self.bus.last.value)
         return None
 
 
@@ -111,7 +111,7 @@ class DataStreamMasterDriver(DataStreamBase, DataStreamMonitorMixin):
             self.bus.last.value = int(last)
             self.bus.data.value = data
             await RisingEdge(self.clock)
-            while self.bus.ready.value.integer == 0:
+            while int(self.bus.ready.value) == 0:
                 await RisingEdge(self.clock)
             self.bus.valid.value = 0
             self.bus.last.value = 0
@@ -153,10 +153,10 @@ class DataStreamSlaveDriver(DataStreamBase, DataStreamMonitorMixin):
         async with self.rd_busy:
             self.bus.ready.value = 1
             await RisingEdge(self.clock)
-            while self.bus.valid.value.integer == 0:
+            while int(self.bus.valid.value) == 0:
                 await RisingEdge(self.clock)
-        value = self.bus.data.value.integer
-        last = self.bus.last.value.integer
+        value = int(self.bus.data.value)
+        last = int(self.bus.last.value)
         self.bus.ready.value = 0
         return (value, last)
 

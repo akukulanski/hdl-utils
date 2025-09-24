@@ -160,7 +160,7 @@ async def wait_n_streams(
 ):
     for _ in range(n_streams):
         await RisingEdge(clock)
-        while not (bus.tvalid.value.integer and bus.tlast.value.integer and bus.tready.value.integer):
+        while not (bus.tvalid.value and bus.tlast.value and bus.tready.value):
             await RisingEdge(clock)
     await RisingEdge(clock)
 
