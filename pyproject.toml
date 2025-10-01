@@ -9,12 +9,12 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "cocotb==1.9.2",
-    "amaranth",
-    "pytest",
-    "numpy",
+    "amaranth~=0.5.7",
+    "pytest~=8.4.2",
+    "numpy~=2.3.3",
     "amaranth-cocotb",
-    "ipython",
-    "cocotb-test",
+    "ipython~=9.6.0",
+    "cocotb-test~=0.2.6",
 ]
 
 [build-system]
