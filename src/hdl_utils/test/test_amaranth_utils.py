@@ -85,33 +85,12 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
     @pytest.mark.parametrize('addr_w,data_w', [(8, 32)])
     def test_axi_lite_device(self, addr_w, data_w):
         from hdl_utils.amaranth_utils.axi_lite_device import AxiLiteDevice
-        registers_map = [
-            ('reg_rw_1', 'rw', 0x00000000, [
-                ('field_1', 32,  0),
-            ]),
-            ('reg_rw_2', 'rw', 0x00000004, [
-                ('field_2',  1,  0),
-                ('field_3', 15,  1),
-                ('field_4', 16, 16),
-            ]),
-            ('reg_rw_3', 'rw', 0x00000008, [
-                ('field_5', 32,  0),
-            ]),
-            ('reg_ro_1', 'ro', 0x0000000C, [
-                ('field_10', 32,  0),
-            ]),
-            ('reg_ro_2', 'ro', 0x00000010, [
-                ('field_20',  1,  0),
-                ('field_30', 15,  1),
-                ('field_40', 16, 16),
-            ]),
-            ('reg_ro_3', 'ro', 0x00000014, [
-                ('field_50', 32,  0),
-            ]),
-        ]
+        from hdl_utils.test.example_reg_map import get_example_reg_map_factory
+        reg_map_factory = get_example_reg_map_factory(data_w)
+        registers_map = reg_map_factory.generate_register_map()
         highest_addr = max([
             addr
-            for _, __, addr, ___ in registers_map
+            for name, dir, addr, default, fields in registers_map
         ])
         core = AxiLiteDevice(
             addr_w=addr_w,

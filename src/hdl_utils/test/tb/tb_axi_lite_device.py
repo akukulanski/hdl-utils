@@ -6,6 +6,8 @@ import os
 
 from hdl_utils.cocotb_utils.buses.axi_lite import AXI4LiteMaster
 
+from hdl_utils.test.example_reg_map import get_example_reg_map_factory
+
 
 P_ADDR_W = int(os.environ['P_ADDR_W'])
 P_DATA_W = int(os.environ['P_DATA_W'])
@@ -14,12 +16,15 @@ P_HIGHEST_ADDR = int(os.environ['P_HIGHEST_ADDR'])
 ADDR_JUMP = P_DATA_W // 8
 
 
+reg_map = get_example_reg_map_factory(P_DATA_W).generate_register_map()
+
+
 class Testbench:
     clk_period = 10
 
     def __init__(self, dut):
         self.dut = dut
-        self.m_axil = AXI4LiteMaster(entity=dut, name='s_axil_', clock=dut.clk)
+        self.m_axil = AXI4LiteMaster(entity=dut, name='s_axil_', clock=dut.clk, reg_map=reg_map)
 
     def init_signals(self):
         self.dut.field_10.value = 0
@@ -113,3 +118,20 @@ async def check_core(dut):
     assert tb.get_signal_values() == expected_values
     reg_values = await tb.get_reg_values()
     assert reg_values == expected_values
+
+    # Check AXI4LiteMasterDriver.write() and AXI4LiteMasterDriver.read()
+    # using Reg Map.
+    reg_values = []
+    for i, reg_name in enumerate(('reg_rw_1', 'reg_rw_2', 'reg_rw_3', 'reg_ro_1', 'reg_ro_2', 'reg_ro_3')):
+        rd = await tb.m_axil.read(reg_name)
+        assert rd == expected_values[i], f'{hex(rd)} != {hex(expected_values[i])}'
+
+    await tb.m_axil.write('reg_rw_1', 0x0001)
+    await tb.m_axil.write('reg_rw_2', 0x0011)
+    await tb.m_axil.write('reg_rw_3', 0x0011)
+    rd = await tb.m_axil.read('reg_rw_1')
+    assert rd == 0x0001, f'{hex(rd)} != {hex(0x0001)}'
+    rd = await tb.m_axil.read('reg_rw_2')
+    assert rd == 0x0011, f'{hex(rd)} != {hex(0x0011)}'
+    rd = await tb.m_axil.read('reg_rw_3')
+    assert rd == 0x0011, f'{hex(rd)} != {hex(0x0011)}'

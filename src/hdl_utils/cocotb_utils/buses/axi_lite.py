@@ -2,6 +2,7 @@ from cocotb.triggers import Lock, RisingEdge
 from cocotb.handle import SimHandleBase
 
 from .bus import Bus, SignalInfo, DIR_OUTPUT, DIR_INPUT
+from .reg_map import RegMap, Reg
 
 
 __all__ = [
@@ -121,14 +122,22 @@ class AXI4LiteMasterDriver(AXI4LiteBase):
         self,
         entity: SimHandleBase,
         name: str,
-        clock: SimHandleBase
+        clock: SimHandleBase,
+        reg_map: list[tuple | list | Reg] = None,
     ):
         super().__init__(entity, name, clock)
+        self.reg_map = self.create_reg_map(reg_map)
         self.bus = AXI4LiteMasterBus(entity, name, clock)
         self.bus.init_signals()
         # Mutex for each channel to prevent contention
         self.wr_busy = Lock(name + "_wr_busy")
         self.rd_busy = Lock(name + "_rd_busy")
+
+    def create_reg_map(self, reg_map: list[tuple | list | Reg | None]):
+        reg_map = reg_map or []
+        is_raw_list = len(reg_map) and isinstance(reg_map[0], (tuple, list))
+        reg_map_cls = RegMap.from_reg_map_raw_list if is_raw_list else RegMap
+        return reg_map_cls(reg_map)
 
     async def write_reg(self, addr: int, value: int):
         async with self.wr_busy:
@@ -166,6 +175,30 @@ class AXI4LiteMasterDriver(AXI4LiteBase):
             rd = self.rdata
             await RisingEdge(self.clock)
         return rd
+
+    def _get_reg_addr(self, reg: int | str | Reg) -> Reg:
+        if isinstance(reg, int):
+            return reg
+        elif isinstance(reg, str):
+            reg_name = reg
+            reg = self.reg_map.get_reg_by_name(reg_name)
+            if reg is None:
+                raise ValueError(f'Register not found: {reg_name}')
+            return reg.addr
+        elif isinstance(reg, Reg):
+            return reg.addr
+
+        raise TypeError(f'Invalid register type: {reg} ({type(reg)})')
+
+    async def write(self, reg: int | str | Reg, value: int):
+        addr = self._get_reg_addr(reg)
+        ret = await self.write_reg(addr, value)
+        return ret
+
+    async def read(self, reg: int | str | Reg):
+        addr = self._get_reg_addr(reg)
+        ret = await self.read_reg(addr)
+        return ret
 
 
 AXI4LiteMaster = AXI4LiteMasterDriver
