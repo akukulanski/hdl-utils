@@ -20,7 +20,7 @@ class SkidBuffer(Elaboratable):
     def elaborate(self, platform):
 
         OPT_LOWPOWER = 0
-        OPT_OUTREG = 1
+        OPT_OUTREG = 0  # FIXME: unknown issues when OPT_OUTREG == 1.
 
         sink_valid = self.sink_valid
         sink_ready = self.sink_ready
