@@ -1,7 +1,11 @@
 from amaranth import Elaboratable, Module, ResetSignal, Signal
 from amaranth.lib import wiring
 
-from hdl_utils.amaranth_utils.interfaces.axi4_stream import AXI4StreamSignature
+from hdl_utils.amaranth_utils.interfaces.axi4_stream import (
+    AXI4StreamSignature,
+    SlaveAXI4StreamInterface,
+    MasterAXI4StreamInterface,
+)
 
 
 class SkidBuffer(Elaboratable):
@@ -46,7 +50,7 @@ class SkidBuffer(Elaboratable):
         # r_data
         with m.If(OPT_LOWPOWER & (~source_valid | source_ready)):
             m.d.sync += r_data.eq(0)
-        with m.Elif((int(not OPT_OUTREG) | sink_valid) & sink_ready):
+        with m.Elif((int(not(OPT_LOWPOWER)) | int(not OPT_OUTREG) | sink_valid) & sink_ready):
             m.d.sync += r_data.eq(sink_data)
 
         m.d.comb += w_data.eq(r_data)
@@ -183,6 +187,11 @@ class AXISkidBufferWrapper(Elaboratable):
         assert core_source is not None or not add_output_buffer, (
             'add_output_buffer is True, but no source interface was specified'
         )
+        assert isinstance(core, Elaboratable)
+        assert isinstance(add_input_buffer, bool)
+        assert isinstance(add_output_buffer, bool)
+        assert isinstance(core_sink, SlaveAXI4StreamInterface)
+        assert isinstance(core_source, MasterAXI4StreamInterface)
         self.wrapped_core = core
         self.add_input_buffer = add_input_buffer
         self.add_output_buffer = add_output_buffer
