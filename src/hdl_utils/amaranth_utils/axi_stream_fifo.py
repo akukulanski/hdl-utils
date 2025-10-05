@@ -33,6 +33,8 @@ class AXIStreamFIFO(Elaboratable):
         )
         total_width = len(self.sink.flatten())
         self.fifo = fifo_cls(width=total_width, depth=depth, *args, **kwargs)
+        self.r_level = self.fifo.r_level
+        self.w_level = self.fifo.w_level
 
     def get_ports(self):
         return self.sink.extract_signals() + self.source.extract_signals()
@@ -77,7 +79,8 @@ class FastClkAXIStreamFIFO(Elaboratable):
     and include Skid Buffers at the start, at the end, and between each FIFO.
     """
 
-    def __init__(self, data_w: int, user_w: int, depth: int, max_fifo_depth: int = 4096):
+    def __init__(self, data_w: int, user_w: int, depth: int, *,
+                 max_fifo_depth: int = 4096, **kwargs):
         self.total_depth = depth
         self.max_fifo_depth = max_fifo_depth
         fifos_depth = []
@@ -86,7 +89,7 @@ class FastClkAXIStreamFIFO(Elaboratable):
         assert sum(fifos_depth) == depth, f'{sum(fifos_depth)} != {depth}'
 
         self._fifos = [
-            AXIStreamFIFO(data_w=data_w, user_w=user_w, depth=this_fifo_depth)
+            AXIStreamFIFO(data_w=data_w, user_w=user_w, depth=this_fifo_depth, **kwargs)
             for this_fifo_depth in fifos_depth
         ]
         self.fifos = [
@@ -103,6 +106,8 @@ class FastClkAXIStreamFIFO(Elaboratable):
         assert sum([f.wrapped_core.fifo.depth for f in self.fifos]) == depth
         self.sink = self.fifos[0].sink
         self.source = self.fifos[-1].source
+        self.r_level = sum([f.wrapped_core.r_level for f in self.fifos])
+        self.w_level = sum([f.wrapped_core.w_level for f in self.fifos])
 
     def get_ports(self):
         ports = []
