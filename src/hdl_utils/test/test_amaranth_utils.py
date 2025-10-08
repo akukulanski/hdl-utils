@@ -206,17 +206,39 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
 
-    @pytest.mark.parametrize('data_w,user_w', [(8, 2)])
-    def test_axi_stream_skid_buffer(self, data_w: int, user_w: int):
+    @pytest.mark.parametrize('data_w,user_w,reg_output', [(8, 2, False), (8, 2, True)])
+    def test_axi_stream_skid_buffer(self, data_w: int, user_w: int, reg_output: bool):
         from hdl_utils.amaranth_utils.skid_buffer import AXISkidBuffer
 
         core = AXISkidBuffer(
             data_w=data_w,
             user_w=user_w,
+            reg_output=reg_output,
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_pass_through'
-        vcd_file = f'./tb_axi_stream_skid_buffer_{data_w}_{user_w}.vcd'
+        postfix = f'_r' if reg_output else ''
+        vcd_file = f'./tb_axi_stream_skid_buffer_{data_w}_{user_w}{postfix}.vcd'
+        env = {
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+            'P_HAS_TKEEP': str(int(bool(hasattr(core.sink, 'tkeep')))),
+            'P_REG_OUTPUT': str(int(reg_output)),
+            'P_TEST_LENGTH': str(32),
+        }
+        self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
+
+    @pytest.mark.parametrize('data_w,user_w', [(8, 2)])
+    def test_axi_stream_output_reg(self, data_w: int, user_w: int):
+        from hdl_utils.amaranth_utils.skid_buffer import AXISOutputReg
+
+        core = AXISOutputReg(
+            data_w=data_w,
+            user_w=user_w,
+        )
+        ports = core.get_ports()
+        test_module = 'tb.tb_axi_stream_pass_through'
+        vcd_file = f'./tb_axi_stream_xx_{data_w}_{user_w}.vcd'
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
@@ -224,7 +246,6 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             'P_TEST_LENGTH': str(32),
         }
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
-
 
     @pytest.mark.parametrize('data_w,user_w,no_tkeep,add_input_buffer,add_output_buffer', [
         (8, 2, False, False, False),

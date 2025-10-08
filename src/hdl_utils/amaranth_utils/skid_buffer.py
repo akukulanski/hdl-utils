@@ -1,4 +1,4 @@
-from amaranth import Elaboratable, Module, ResetSignal, Signal
+from amaranth import Elaboratable, Module, ResetSignal, Signal, Mux
 from amaranth.lib import wiring
 
 from hdl_utils.amaranth_utils.interfaces.axi4_stream import (
@@ -22,76 +22,93 @@ class SkidBuffer(Elaboratable):
         self.source_data = Signal(width)
 
     def elaborate(self, platform):
-
-        OPT_LOWPOWER = 0
-        OPT_OUTREG = 0  # FIXME: unknown issues when OPT_OUTREG == 1.
-
-        sink_valid = self.sink_valid
-        sink_ready = self.sink_ready
-        sink_data = self.sink_data
-        source_valid = self.source_valid
-        source_ready = self.source_ready
-        source_data = self.source_data
-
         m = Module()
 
-        r_valid = Signal()
-        r_data = Signal.like(sink_data)
+        CREATE_BUFF_FULL_REG = True
 
-        w_data = Signal.like(r_data)
+        buff_empty = Signal(init=1)
+        buff_data = Signal.like(self.sink_data)
+        buff_full = Signal() if CREATE_BUFF_FULL_REG else ~buff_empty
 
-        # r_valid
-        with m.If((sink_valid & sink_ready) & (source_valid & ~source_ready)):
-            # We have incoming data, but the output is stalled
-            m.d.sync += r_valid.eq(1)
-        with m.Elif(source_ready):
-            m.d.sync += r_valid.eq(0)
+        m.d.comb += self.sink_ready.eq(buff_empty)
+        m.d.comb += self.source_valid.eq(self.sink_valid | buff_full)
+        m.d.comb += self.source_data.eq(Mux(buff_full, buff_data, self.sink_data))
 
-        # r_data
-        with m.If(OPT_LOWPOWER & (~source_valid | source_ready)):
-            m.d.sync += r_data.eq(0)
-        with m.Elif((int(not(OPT_LOWPOWER)) | int(not OPT_OUTREG) | sink_valid) & sink_ready):
-            m.d.sync += r_data.eq(sink_data)
+        with m.If((buff_empty) & self.sink_valid & ~self.source_ready):
+            m.d.sync += buff_empty.eq(0)
+            if CREATE_BUFF_FULL_REG:
+                m.d.sync += buff_full.eq(1)
+            m.d.sync += buff_data.eq(self.sink_data)
+        with m.Elif(buff_full & self.source_ready):
+            m.d.sync += buff_empty.eq(1)
+            if CREATE_BUFF_FULL_REG:
+                m.d.sync += buff_full.eq(0)
 
-        m.d.comb += w_data.eq(r_data)
+        return m
 
-        # sink_ready
-        m.d.comb += sink_ready.eq(~r_valid)
 
-        i_reset = ResetSignal()
-        # And then move on to the output port
-        if not OPT_OUTREG:
-            # Outputs are combinatorially determined from inputs
-            # source_valid
-            m.d.comb += source_valid.eq(~i_reset & (sink_valid | r_valid))
+class StreamOutputReg(Elaboratable):
+    def __init__(
+        self,
+        width: int,
+    ):
+        self.sink_valid = Signal()
+        self.sink_ready = Signal()
+        self.sink_data = Signal(width)
+        self.source_valid = Signal()
+        self.source_ready = Signal()
+        self.source_data = Signal(width)
 
-            # source_data
-            with m.If(r_valid):
-                m.d.comb += source_data.eq(r_data)
-            with m.Elif(int(not OPT_LOWPOWER) | sink_valid):
-                m.d.comb += source_data.eq(sink_data)
-            with m.Else():
-                m.d.comb += source_data.eq(0)
-        else:
-            # Register our outputs
-            # source_valid
-            # reg	rsource_valid;
-            rsource_valid = Signal()
+    def elaborate(self, platform):
+        m = Module()
 
-            with m.If(~source_valid | source_ready):
-                m.d.sync += rsource_valid.eq(sink_valid | r_valid)
+        sink_valid_r = Signal()
+        sink_data_r = Signal.like(self.sink_data)
 
-            m.d.comb += source_valid.eq(rsource_valid)
+        m.d.comb += self.sink_ready.eq(self.source_ready | ~sink_valid_r)
+        m.d.comb += self.source_valid.eq(sink_valid_r)
+        m.d.comb += self.source_data.eq(sink_data_r)
 
-            # source_data
-            with m.If(~source_valid | source_ready):
-                with m.If(r_valid):
-                    m.d.sync += source_data.eq(r_data)
-                with m.Elif(int (not OPT_LOWPOWER) | sink_valid):
-                    m.d.sync += source_data.eq(sink_data)
-                with m.Else():
-                     m.d.sync += source_data.eq(0)
+        with m.If(self.sink_valid & self.sink_ready):
+            m.d.sync += sink_valid_r.eq(self.sink_valid)
+            m.d.sync += sink_data_r.eq(self.sink_data)
+        with m.Elif(self.source_valid & self.source_ready):
+            m.d.sync += sink_valid_r.eq(0)
+            # m.d.sync += sink_data_r.eq(0)
 
+        return m
+
+
+class AXISOutputReg(Elaboratable):
+
+    def __init__(self, data_w: int, user_w: int, no_tkeep: bool = False):
+        self.sink = AXI4StreamSignature.create_slave(
+            data_w=data_w,
+            user_w=user_w,
+            no_tkeep=no_tkeep,
+            path=['s_axis'],
+        )
+        self.source = AXI4StreamSignature.create_master(
+            data_w=data_w,
+            user_w=user_w,
+            no_tkeep=no_tkeep,
+            path=['m_axis'],
+        )
+        total_width = len(self.sink.flatten())
+        self.output_reg = StreamOutputReg(width=total_width)
+
+    def get_ports(self):
+        return self.sink.extract_signals() + self.source.extract_signals()
+
+    def elaborate(self, platform):
+        m = Module()
+        m.submodules.output_reg = output_reg = self.output_reg
+        m.d.comb += output_reg.sink_valid.eq(self.sink.tvalid)
+        m.d.comb += output_reg.sink_data.eq(self.sink.flatten())
+        m.d.comb += self.sink.tready.eq(output_reg.sink_ready)
+        m.d.comb += self.source.tvalid.eq(output_reg.source_valid)
+        m.d.comb += self.source.assign_from_flat(output_reg.source_data)
+        m.d.comb += output_reg.source_ready.eq(self.source.tready)
         return m
 
 
@@ -102,7 +119,9 @@ class AXISkidBuffer(Elaboratable):
         data_w: int,
         user_w: int,
         no_tkeep: bool = False,
+        reg_output: bool = False,
     ):
+        self.reg_output = reg_output
         self.sink = AXI4StreamSignature.create_slave(
             data_w=data_w,
             user_w=user_w,
@@ -117,6 +136,7 @@ class AXISkidBuffer(Elaboratable):
         )
         total_width = len(self.sink.flatten())
         self.skid_buffer = SkidBuffer(width=total_width)
+        self.output_buffer = StreamOutputReg(width=total_width) if reg_output else None
 
     def get_ports(self):
         return self.sink.extract_signals() + self.source.extract_signals()
@@ -127,9 +147,20 @@ class AXISkidBuffer(Elaboratable):
         m.d.comb += skid_buffer.sink_valid.eq(self.sink.tvalid)
         m.d.comb += skid_buffer.sink_data.eq(self.sink.flatten())
         m.d.comb += self.sink.tready.eq(skid_buffer.sink_ready)
-        m.d.comb += self.source.tvalid.eq(skid_buffer.source_valid)
-        m.d.comb += self.source.assign_from_flat(skid_buffer.source_data)
-        m.d.comb += skid_buffer.source_ready.eq(self.source.tready)
+
+        if self.output_buffer is not None:
+            m.submodules.output_buffer = output_buffer = self.output_buffer
+            m.d.comb += output_buffer.sink_valid.eq(skid_buffer.source_valid)
+            m.d.comb += output_buffer.sink_data.eq(skid_buffer.source_data)
+            m.d.comb += skid_buffer.source_ready.eq(output_buffer.sink_ready)
+            m.d.comb += self.source.tvalid.eq(output_buffer.source_valid)
+            m.d.comb += self.source.assign_from_flat(output_buffer.source_data)
+            m.d.comb += output_buffer.source_ready.eq(self.source.tready)
+        else:
+            m.d.comb += self.source.tvalid.eq(skid_buffer.source_valid)
+            m.d.comb += self.source.assign_from_flat(skid_buffer.source_data)
+            m.d.comb += skid_buffer.source_ready.eq(self.source.tready)
+
         return m
 
     @classmethod
@@ -206,6 +237,7 @@ class AXISkidBufferWrapper(Elaboratable):
                 data_w=data_w,
                 user_w=user_w,
                 no_tkeep=no_tkeep,
+                reg_output=True,
             ) if add_input_buffer else None
             self.sink = self.skid_buffer_in.sink if add_input_buffer else core_sink
 
@@ -217,6 +249,7 @@ class AXISkidBufferWrapper(Elaboratable):
                 data_w=data_w,
                 user_w=user_w,
                 no_tkeep=no_tkeep,
+                reg_output=True,
             ) if add_output_buffer else None
             self.source = self.skid_buffer_out.source if add_output_buffer else core_source
 
@@ -277,6 +310,7 @@ def main(sys_args=None):
     core = AXISkidBuffer(
         data_w=args.data_width,
         user_w=args.user_width,
+        reg_output=True,
     )
     if args.active_low_reset:
         from hdl_utils.amaranth_utils.rstn_wrapper import RstnWrapper
