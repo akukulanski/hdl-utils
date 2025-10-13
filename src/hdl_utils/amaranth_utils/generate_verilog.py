@@ -9,6 +9,9 @@ def generate_verilog(core: Elaboratable,
                      name: str = None,
                      ports: list = None,
                      prefix: str = '',
+                     emit_src: bool = False,
+                     strip_internal_attrs: bool = False,
+                     convert_attrs_to_comments: bool = True,
                      remove_duplicate_underscores: bool = True,
                      remove_comments: bool = True,
                      remove_empty_lines: bool = True,
@@ -40,13 +43,14 @@ def generate_verilog(core: Elaboratable,
         ports = core.get_ports()
 
     fragment = Fragment.get(core, None)
-    output = verilog.convert(fragment, name=name, ports=ports)
+    output = verilog.convert(fragment, name=name, ports=ports, emit_src=emit_src, strip_internal_attrs=strip_internal_attrs)
 
     if timescale:
         output = f'{timescale}\n\n{output}'
 
     # Reformat the verilog output
-    output = re.sub(r'\*\)', '*/', re.sub(r'\(\*', '/*', output))
+    if convert_attrs_to_comments:
+        output = re.sub(r'\*\)', '*/', re.sub(r'\(\*', '/*', output))
     # Fix duplicate underscores
     if remove_duplicate_underscores:
         output = output.replace('__', '_')
