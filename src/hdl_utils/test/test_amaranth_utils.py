@@ -1,6 +1,13 @@
+import os
 import pytest
 
 from hdl_utils.cocotb_utils.testcases import TemplateTestbenchAmaranth
+
+
+this_dir = os.path.dirname(__file__)
+waveforms_dir = os.path.join(this_dir, '..', '..', '..', 'output', 'waveforms')
+
+in_waveform_dir = lambda x: os.path.join(waveforms_dir, x)
 
 
 class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
@@ -99,7 +106,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_lite_device'
-        vcd_file = './axi_lite_device.py.vcd'
+        vcd_file = in_waveform_dir('axi_lite_device.py.vcd')
         env = {
             'P_ADDR_W': str(addr_w),
             'P_DATA_W': str(data_w),
@@ -119,7 +126,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_pass_through'
-        vcd_file = f'./tb_axi_stream_fifo_{data_w}_{user_w}_{depth}.vcd'
+        vcd_file = in_waveform_dir(f'tb_axi_stream_fifo_{data_w}_{user_w}_{depth}.vcd')
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
@@ -155,7 +162,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         assert core.source is core.fifos[-1].skid_buffer_out.source
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_pass_through'
-        vcd_file = f'./tb_fast_clk_axi_stream_fifo_{data_w}_{user_w}_{depth}_{max_fifo_depth}.vcd'
+        vcd_file = in_waveform_dir(f'tb_fast_clk_axi_stream_fifo_{data_w}_{user_w}_{depth}_{max_fifo_depth}.vcd')
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
@@ -197,7 +204,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             pfx = ''
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_fifo_cdc'
-        vcd_file = f'./tb_axi_stream_fifo_cdc_{data_w}_{user_w}_{depth}{pfx}.vcd'
+        vcd_file = in_waveform_dir(f'tb_axi_stream_fifo_cdc_{data_w}_{user_w}_{depth}{pfx}.vcd')
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
@@ -218,7 +225,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_pass_through'
         postfix = f'_r' if reg_output else ''
-        vcd_file = f'./tb_axi_stream_skid_buffer_{data_w}_{user_w}{postfix}.vcd'
+        vcd_file = in_waveform_dir(f'tb_axi_stream_skid_buffer_{data_w}_{user_w}{postfix}.vcd')
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
@@ -238,7 +245,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_pass_through'
-        vcd_file = f'./tb_axi_stream_xx_{data_w}_{user_w}.vcd'
+        vcd_file = in_waveform_dir(f'tb_axi_stream_xx_{data_w}_{user_w}.vcd')
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
@@ -275,7 +282,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_pass_through'
-        vcd_file = f'./tb_skid_buffer_wrapper_{data_w}_{user_w}_{add_input_buffer}_{add_output_buffer}.vcd'
+        vcd_file = in_waveform_dir(f'tb_skid_buffer_wrapper_{data_w}_{user_w}_{add_input_buffer}_{add_output_buffer}.vcd')
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
@@ -318,7 +325,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             base_name += '_sb'
 
         test_module = 'tb.tb_axi_stream_width_converter_down'
-        vcd_file = f'./{base_name}.vcd'
+        vcd_file = in_waveform_dir(f'{base_name}.vcd')
         env = {
             'P_DWI': str(DWI),
             'P_DWO': str(DWO),
@@ -377,7 +384,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             ports = core.get_ports()
             base_name += '_sb'
         test_module = 'tb.tb_axi_stream_width_converter_up'
-        vcd_file = f'./{base_name}.vcd'
+        vcd_file = in_waveform_dir(f'{base_name}.vcd')
         env = {
             'P_DWI': str(DWI),
             'P_DWO': str(DWO),
@@ -416,7 +423,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_to_full'
-        vcd_file = './tb_axi_stream_to_full.py.vcd'
+        vcd_file = in_waveform_dir('tb_axi_stream_to_full.py.vcd')
         env = {
             'P_ADDR_W': str(addr_w),
             'P_DATA_W': str(data_w),
@@ -435,7 +442,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_dma'
-        vcd_file = './tb_axi_dma.py.vcd'
+        vcd_file = in_waveform_dir('tb_axi_dma.py.vcd')
         env = {
             'P_ADDR_W': str(addr_w),
             'P_DATA_W': str(data_w),
@@ -461,7 +468,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_dma_triple_buffer'
-        vcd_file = './tb_axi_dma_triple_buffer.py.vcd'
+        vcd_file = in_waveform_dir('tb_axi_dma_triple_buffer.py.vcd')
         env = {
             'P_ADDR_W': str(addr_w),
             'P_DATA_W': str(data_w),
@@ -500,7 +507,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_splitter'
-        vcd_file = f'./tb_axi_stream_splitter_{data_w}_{user_w}_{no_tkeep}_{n_split}.vcd'
+        vcd_file = in_waveform_dir(f'tb_axi_stream_splitter_{data_w}_{user_w}_{no_tkeep}_{n_split}.vcd')
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
