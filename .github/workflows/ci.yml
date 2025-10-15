@@ -1,0 +1,94 @@
+on:
+  push:
+  pull_request:
+  merge_group:
+
+name: CI
+jobs:
+
+  # pep8:
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+        - '3.12'
+        - '3.13'
+    name: 'test (${{ matrix.python-version }})'
+    steps:
+    - name: Check out source code
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        uv sync
+    - name: Run tests
+      run: |
+        uv run python3 -m pytest -s .
+
+  examples:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+        - '3.12'
+        - '3.13'
+    name: 'test (${{ matrix.python-version }})'
+    steps:
+    - name: Check out source code
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        uv sync
+    - name: Run examples
+      uses: ./scripts/run_examples.sh
+
+  publish-package:
+    needs:
+      - test
+      - examples
+    runs-on: ubuntu-latest
+    environment: publish
+    permissions:
+      id-token: write
+    steps:
+    - name: Check out source code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Build package
+      run: |
+        pip install build
+        python -m build
+    - name: Upload package artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: package
+        path: dist/
+    - name: Verify package metadata
+      run: |
+        pip install twine
+        twine check dist/*
+    - name: Publish package to Test PyPI
+      if: ${{ github.repository == 'akukulanski/hdl-utils' && github.event_name == 'push' && github.event.ref == 'refs/heads/main' }}
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+    - name: Publish package to PyPI
+      # if: Push of tag that starts with 'v' and does not contain '-dev'
+      if: ${{ github.repository == 'akukulanski/hdl-utils' && github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v') && !contains(github.event.ref, 'dev') }}
+      uses: pypa/gh-action-pypi-publish@release/v1
