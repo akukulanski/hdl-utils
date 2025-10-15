@@ -61,7 +61,8 @@ jobs:
         curl -LsSf https://astral.sh/uv/install.sh | sh
         uv sync
     - name: Run examples
-      uses: ./scripts/run_examples.sh
+      run: |
+        ./scripts/run_examples.sh
 
   publish-package:
     needs:
