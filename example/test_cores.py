@@ -1,7 +1,14 @@
+import os
 import pytest
 
 from hdl_utils.cocotb_utils.testcases import (
     TemplateTestbenchVerilog, TemplateTestbenchAmaranth)
+
+
+this_dir = os.path.dirname(__file__)
+waveforms_dir = os.path.join(this_dir, '..', 'output', 'waveforms')
+
+in_waveform_dir = lambda x: os.path.join(waveforms_dir, x)
 
 
 class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
@@ -12,7 +19,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         core = Counter(width=width)
         ports = core.get_ports()
         test_module = 'tb.tb_counter'
-        vcd_file = './counter.py.vcd'
+        vcd_file = in_waveform_dir('counter.py.vcd')
         env = {
             'P_WIDTH': str(width)
         }
@@ -24,7 +31,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         core = DataStreamInverter(width=8)
         ports = core.get_ports()
         test_module = 'tb.tb_data_stream_inverter'
-        vcd_file = './data_stream_inv.vcd'
+        vcd_file = in_waveform_dir('data_stream_inv.vcd')
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file)
 
     def test_data_stream_pass_through(self):
@@ -32,7 +39,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         core = DataStreamPassThrough(width=8)
         ports = core.get_ports()
         test_module = 'tb.tb_data_stream_pass_through'
-        vcd_file = './data_stream_pass_through.vcd'
+        vcd_file = in_waveform_dir('data_stream_pass_through.vcd')
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file)
 
     @pytest.mark.parametrize('cls_id', ['A', 'B'])
@@ -45,7 +52,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         core = core_cls()
         ports = core.get_ports()
         test_module = 'tb.tb_stream_signature'
-        vcd_file = './stream_signature.vcd'
+        vcd_file = in_waveform_dir('stream_signature.vcd')
         self.run_testbench(core, test_module, ports, vcd_file=vcd_file)
 
 
@@ -61,7 +68,7 @@ class TestbenchCoresVerilog(TemplateTestbenchVerilog):
         # name of cocotb test module
         test_module = 'tb.tb_counter'
         # Waveform file
-        vcd_file = './counter.v.vcd'
+        vcd_file = in_waveform_dir('counter.v.vcd')
         # Parameters
         parameters = {
             'WIDTH': width,
@@ -83,7 +90,7 @@ class TestbenchCoresVerilog(TemplateTestbenchVerilog):
         # name of cocotb test module
         test_module = 'tb.tb_uart_rx'
         # Waveform file
-        vcd_file = './uart_rx.v.vcd'
+        vcd_file = in_waveform_dir('uart_rx.v.vcd')
         # Parameters
         parameters = {
             'UART_CLK_DIV': uart_clk_div,
