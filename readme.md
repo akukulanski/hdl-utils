@@ -1,3 +1,5 @@
+[![CI](https://github.com/akukulanski/hdl-utils/actions/workflows/ci.yml/badge.svg)](https://github.com/akukulanski/hdl-utils/actions/workflows/ci.yml)
+
 # HDL-Utils
 
 Utils for an HDL workflow with Amaranth as HDL framework and Cocotb as testing framework.
