@@ -27,6 +27,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
+        sudo apt-get update
+        DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --fix-broken \
+          iverilog
         curl -LsSf https://astral.sh/uv/install.sh | sh
         uv sync
     - name: Run tests
@@ -52,6 +55,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
+        sudo apt-get update
+        DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --fix-broken \
+          iverilog
         curl -LsSf https://astral.sh/uv/install.sh | sh
         uv sync
     - name: Run examples
