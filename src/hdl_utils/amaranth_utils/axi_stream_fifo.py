@@ -1,7 +1,6 @@
-from amaranth import Elaboratable, Module, ResetSignal
+from amaranth import Elaboratable, Module, ResetSignal, Signal, Mux
 from amaranth.lib.fifo import SyncFIFOBuffered, AsyncFIFO
 from amaranth.lib import wiring
-import math
 
 from hdl_utils.amaranth_utils.interfaces.axi4_stream import AXI4StreamSignature
 from hdl_utils.amaranth_utils.skid_buffer import AXISkidBuffer
@@ -16,9 +15,11 @@ class AXIStreamFIFO(Elaboratable):
         depth: int,
         fifo_cls: Elaboratable = SyncFIFOBuffered,
         no_tkeep: bool = False,
+        packet_mode: bool = False,
         *args,
         **kwargs
     ):
+        self.packet_mode = packet_mode
         self.sink = AXI4StreamSignature.create_slave(
             data_w=data_w,
             user_w=user_w,
@@ -45,12 +46,37 @@ class AXIStreamFIFO(Elaboratable):
         w_domain = self.fifo._w_domain if hasattr(self.fifo, '_w_domain') else 'sync'
         # Fifo Instance
         m.submodules.fifo_core = fifo = self.fifo
+
+        if not self.packet_mode:
+            source_tvalid = fifo.r_rdy
+        else:
+            # Count packets. Source is valid if there is at least one packet
+            # or if the fifo is full.
+            source_tvalid = Signal()
+            packet_count = Signal(range(self.fifo.depth))
+            packet_written = Signal()
+            packet_read = Signal()
+            # Keep the packet count
+            m.d.comb += [
+                packet_written.eq(self.sink.accepted() & self.sink.tlast),
+                packet_read.eq(self.source.accepted() & self.source.tlast),
+            ]
+            with m.If(packet_written & ~packet_read):
+                m.d.sync += packet_count.eq(packet_count + 1)
+            with m.Elif(~packet_written & packet_read):
+                m.d.sync += packet_count.eq(packet_count - 1)
+            # Source is valid only if there is at least a packet
+            # or if the fifo is full (to avoid stall).
+            m.d.comb += source_tvalid.eq(
+                fifo.r_rdy & ((packet_count > 0) | ~fifo.w_rdy)
+            )
+
         # Sink
         m.d.comb += fifo.w_data.eq(self.sink.flatten())
         m.d.comb += fifo.w_en.eq(self.sink.accepted())
         m.d.comb += self.sink.tready.eq(fifo.w_rdy & ~ResetSignal(w_domain))
         # Source
-        m.d.comb += self.source.tvalid.eq(fifo.r_rdy)
+        m.d.comb += self.source.tvalid.eq(source_tvalid)
         m.d.comb += fifo.r_en.eq(self.source.accepted())
         m.d.comb += self.source.assign_from_flat(fifo.r_data)
         # Return module

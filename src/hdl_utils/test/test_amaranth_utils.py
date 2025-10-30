@@ -115,27 +115,41 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
 
-    @pytest.mark.parametrize('data_w,user_w,depth', [(8, 2, 16)])
-    def test_axi_stream_fifo(self, data_w: int, user_w: int, depth: int):
+    @pytest.mark.parametrize('data_w,user_w,depth,packet_mode', [
+        (8, 2, 16, False),
+        (8, 2, 16, True),
+    ])
+    def test_axi_stream_fifo(self, data_w: int, user_w: int, depth: int, packet_mode: bool):
         from hdl_utils.amaranth_utils.axi_stream_fifo import AXIStreamFIFO
 
         core = AXIStreamFIFO(
             data_w=data_w,
             user_w=user_w,
             depth=depth,
+            packet_mode=packet_mode,
         )
         ports = core.get_ports()
         test_module = 'tb.tb_axi_stream_pass_through'
-        vcd_file = in_waveform_dir(f'tb_axi_stream_fifo_{data_w}_{user_w}_{depth}.vcd')
+        base_name = f'tb_axi_stream_fifo_{data_w}_{user_w}_{depth}'
+        if packet_mode:
+            base_name += '_packet'
+        vcd_file = in_waveform_dir(f'{base_name}.vcd')
         env = {
             'P_DATA_W': str(data_w),
             'P_USER_W': str(user_w),
             'P_DEPTH': str(depth),
             'P_HAS_TKEEP': str(int(bool(hasattr(core.sink, 'tkeep')))),
+            'P_PACKET_MODE': str(int(bool(packet_mode))),
             'P_TEST_LENGTH': str(32 * depth),
         }
-        self.run_testbench(core, test_module, ports,
-                           vcd_file=vcd_file, env=env)
+        self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
+
+        # If packet mode, run extra testbench specific for that mode
+        if packet_mode:
+            test_module = 'tb.tb_axi_stream_fifo_packet_mode'
+            base_name = f'tb_axi_stream_fifo_packet_mode_{data_w}_{user_w}_{depth}'
+            vcd_file = in_waveform_dir(f'{base_name}.vcd')
+            self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
 
     @pytest.mark.parametrize('data_w,user_w,depth,max_fifo_depth', [
         (8, 2, 16, 8),
