@@ -221,8 +221,8 @@ class AXISkidBufferWrapper(Elaboratable):
         assert isinstance(core, Elaboratable)
         assert isinstance(add_input_buffer, bool)
         assert isinstance(add_output_buffer, bool)
-        assert isinstance(core_sink, SlaveAXI4StreamInterface)
-        assert isinstance(core_source, MasterAXI4StreamInterface)
+        assert isinstance(core_sink, (SlaveAXI4StreamInterface, type(None)))
+        assert isinstance(core_source, (MasterAXI4StreamInterface, type(None)))
         self.wrapped_core = core
         self.add_input_buffer = add_input_buffer
         self.add_output_buffer = add_output_buffer
@@ -275,11 +275,11 @@ class AXISkidBufferWrapper(Elaboratable):
         m = Module()
         m.submodules.wrapped_core = self.wrapped_core
 
-        if self.skid_buffer_in is not None:
+        if self.add_input_buffer:
             m.submodules.skid_buffer_in = self.skid_buffer_in
             wiring.connect(m, self.skid_buffer_in.source, self.core_sink)
 
-        if self.skid_buffer_out is not None:
+        if self.add_output_buffer:
             m.submodules.skid_buffer_out = self.skid_buffer_out
             wiring.connect(m, self.core_source, self.skid_buffer_out.sink)
 
