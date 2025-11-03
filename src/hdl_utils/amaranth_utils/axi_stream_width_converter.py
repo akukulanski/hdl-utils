@@ -1,4 +1,4 @@
-from amaranth import Elaboratable, Module, Signal, Cat, Const, ResetSignal
+from amaranth import Elaboratable, Module, Signal, Cat, Const, ResetSignal, Record
 
 from hdl_utils.amaranth_utils.interfaces.axi4_stream import AXI4StreamSignature
 
@@ -43,20 +43,13 @@ class AXIStreamWidthConverterDown(Elaboratable):
 
         data_w_i = len(self.sink.tdata)
         data_w_o = len(self.source.tdata)
-
-        if self.has_tuser:
-            user_w_o = len(self.source.tuser)
-        if self.has_tkeep:
-            keep_w_o = len(self.source.tkeep)
         convertion_ratio = data_w_i // data_w_o
 
-        buffer_tlast = Signal.like(self.sink.tlast)
-        buffer_tdata = Signal.like(self.sink.tdata)
-        if self.has_tuser:
-            buffer_tuser = Signal.like(self.sink.tuser)
-        if self.has_tkeep:
-            buffer_tkeep = Signal.like(self.sink.tkeep)
-        beats_remaining = Signal(range(convertion_ratio))
+        buffer = Record([
+            (name, member.shape) for name, member in self.sink.signature.members.items() if name not in ['tvalid', 'tready']
+        ])
+
+        beats_remaining  = Signal(range(convertion_ratio))
         is_last_subchunk = Signal()
         # only_null_bytes_remaining: if only null bytes (bytes w/ tkeep = 0) are
         # remaining in the last chunk (chunk w/ tlast = 1), then is_last_chunk is
@@ -64,108 +57,35 @@ class AXIStreamWidthConverterDown(Elaboratable):
         # are not always properly handled by third-party ip.
         if self.has_tkeep:
             only_null_bytes_remaining = Signal()
-            m.d.comb += only_null_bytes_remaining.eq(~(buffer_tkeep[keep_w_o:]).any())
+            m.d.comb += only_null_bytes_remaining.eq(~(buffer.tkeep[len(self.source.tkeep):]).any())
         else:
             only_null_bytes_remaining = Const(0, 1)
 
         is_last_chunk = Signal()
 
         m.d.comb += [
-            is_last_subchunk.eq(beats_remaining == 0),
-            is_last_chunk.eq(
-                buffer_tlast & (is_last_subchunk | only_null_bytes_remaining)
-            ),
+            is_last_subchunk        .eq(~beats_remaining.any() | only_null_bytes_remaining),
+            is_last_chunk           .eq(buffer.tlast & is_last_subchunk),
+            self.sink.tready        .eq(~self.source.tvalid | (self.source.tready & is_last_subchunk)),
+            *[self.source[key]      .eq(buffer[key]) for key in buffer.fields if key != 'tlast'],
+            self.source.tlast       .eq(is_last_chunk),
         ]
 
-        sink_tready = Signal()
-        m.d.comb += self.sink.tready.eq(sink_tready & ~ResetSignal("sync"))
+        with m.If(self.source.accepted()):
+            m.d.sync += [
+                *[buffer[key]       .eq(buffer[key][len(self.source[key]):]) for key in buffer.fields if key != 'tlast'],
+                beats_remaining     .eq(beats_remaining - 1),
+                self.source.tvalid  .eq(~is_last_subchunk),
+            ]
 
-        with m.FSM():
-            with m.State("IDLE"):
-                m.d.comb += [
-                    sink_tready.eq(1),
-                    self.source.tvalid.eq(0),
-                    self.source.tlast.eq(0),
-                    self.source.tdata.eq(0),
-                ]
-                if self.has_tkeep:
-                    m.d.comb += self.source.tkeep.eq(0)
-                if self.has_tuser:
-                    m.d.comb += self.source.tuser.eq(0)
-                with m.If(self.sink.accepted()):
-                    m.d.sync += [
-                        buffer_tlast.eq(self.sink.tlast),
-                        buffer_tdata.eq(self.sink.tdata),
-                        beats_remaining.eq(convertion_ratio - 1),
-                    ]
-                    if self.has_tuser:
-                        m.d.sync += buffer_tuser.eq(self.sink.tuser)
-                    if self.has_tkeep:
-                        m.d.sync += buffer_tkeep.eq(self.sink.tkeep)
-
-                    m.next = "CONVERTING"
-
-            with m.State("CONVERTING"):
-                m.d.comb += [
-                    sink_tready.eq(self.source.accepted() & is_last_subchunk),
-                    self.source.tvalid.eq(1),
-                    self.source.tlast.eq(is_last_chunk),
-                    self.source.tdata.eq(buffer_tdata[0:data_w_o]),
-                ]
-                if self.has_tuser:
-                    m.d.comb += self.source.tuser.eq(buffer_tuser[0:user_w_o]),
-                if self.has_tkeep:
-                    m.d.comb += self.source.tkeep.eq(buffer_tkeep[0:keep_w_o])
-
-                with m.If(self.source.accepted()):
-                    with m.If(~is_last_subchunk & ~is_last_chunk):
-                        m.d.sync += [
-                            # shift register buffer_tdata
-                            buffer_tdata.eq(Cat(
-                                buffer_tdata[data_w_o:],
-                                Const(0, shape=data_w_o))
-                            ),
-                            # decrease beats remaining by 1
-                            beats_remaining.eq(beats_remaining - 1)
-                        ]
-                        if self.has_tuser:
-                            # shift register buffer_tuser
-                            m.d.sync += buffer_tuser.eq(Cat(
-                                buffer_tuser[user_w_o:],
-                                Const(0, shape=user_w_o))
-                            )
-                        if self.has_tkeep:
-                            # shift register buffer_tkeep
-                            m.d.sync += buffer_tkeep.eq(Cat(
-                                buffer_tkeep[keep_w_o:],
-                                Const(0, shape=keep_w_o))
-                            )
-
-                    with m.Elif(self.sink.accepted()):
-                        m.d.sync += [
-                            buffer_tlast.eq(self.sink.tlast),
-                            buffer_tdata.eq(self.sink.tdata),
-                            beats_remaining.eq(convertion_ratio - 1),
-                        ]
-                        if self.has_tuser:
-                            m.d.sync += buffer_tuser.eq(self.sink.tuser)
-                        if self.has_tkeep:
-                            m.d.sync += buffer_tkeep.eq(self.sink.tkeep)
-
-                    with m.Else():
-                        m.d.sync += [
-                            buffer_tlast.eq(0),
-                            buffer_tdata.eq(0),
-                            beats_remaining.eq(0),
-                        ]
-                        if self.has_tuser:
-                            m.d.sync += buffer_tuser.eq(0)
-                        if self.has_tkeep:
-                            m.d.sync += buffer_tkeep.eq(0)
-                        m.next = "IDLE"
+        with m.If(self.sink.accepted()):
+            m.d.sync += [
+                *[buffer[key]       .eq(self.sink[key]) for key in buffer.fields],
+                beats_remaining     .eq(convertion_ratio - 1),
+                self.source.tvalid  .eq(1),
+            ]
 
         return m
-
 
 class AXIStreamWidthConverterUp(Elaboratable):
 
@@ -209,115 +129,42 @@ class AXIStreamWidthConverterUp(Elaboratable):
         data_w_o = len(self.source.tdata)
         convertion_ratio = data_w_o // data_w_i
 
-        if self.has_tuser:
-            user_w_o = len(self.source.tuser)
-            user_w_i = len(self.sink.tuser)
-            buffer_tuser = Signal.like(self.source.tuser)
-            m.d.comb += self.source.tuser.eq(buffer_tuser)
+        buffer = Record([
+            (name, member.shape) for name, member in self.source.signature.members.items() if name not in ['tvalid', 'tready']
+        ])
 
-        if self.has_tkeep:
-            keep_w_i = len(self.sink.tkeep)
-            keep_w_o = len(self.source.tkeep)
-            buffer_tkeep = Signal.like(self.source.tkeep)
-            m.d.comb += self.source.tkeep.eq(buffer_tkeep)
-
-        buffer_tlast = Signal.like(self.source.tlast)
-        buffer_tdata = Signal.like(self.source.tdata)
-        beats_remaining = Signal(range(convertion_ratio),
-                                 init=convertion_ratio-1)
-        is_last_subchunk = Signal()
+        beats_remaining     = Signal(range(convertion_ratio), init=convertion_ratio-1)
+        is_last_subchunk    = Signal()
+        padding             = Signal()
+        ready               = Signal()
 
         m.d.comb += [
-            is_last_subchunk.eq(beats_remaining == 0),
-            self.source.tdata.eq(buffer_tdata),
-            self.source.tlast.eq(buffer_tlast),
+            is_last_subchunk    .eq(~beats_remaining.any()),
+            *[self.source[key]  .eq(buffer[key]) for key in buffer.fields],
+            ready               .eq(~self.source.tvalid | self.source.tready),
+            self.sink.tready    .eq(~padding & ready),
         ]
+        with m.If(self.source.tready):
+            m.d.sync += self.source.tvalid.eq(0)
 
-        sink_tready = Signal()
-        m.d.comb += self.sink.tready.eq(sink_tready & ~ResetSignal("sync"))
-
-        with m.FSM():
-            with m.State("CONVERTING"):
-                m.d.comb += [
-                    sink_tready.eq(1),
-                    self.source.tvalid.eq(0),
-                ]
-                with m.If(self.sink.accepted()):
-                    m.d.sync += [
-                        buffer_tdata.eq(Cat(buffer_tdata[data_w_i:],
-                                            self.sink.tdata)),
-                        buffer_tlast.eq(self.sink.tlast),
-                        beats_remaining.eq(beats_remaining - 1),
-                    ]
-                    if self.has_tuser:
-                        m.d.sync += buffer_tuser.eq(Cat(buffer_tuser[user_w_i:], self.sink.tuser))
-                    if self.has_tkeep:
-                        m.d.sync += buffer_tkeep.eq(Cat(buffer_tkeep[keep_w_i:], self.sink.tkeep))
-                    with m.If(is_last_subchunk):
-                        m.next = "WAITING_FOR_SLAVE"
-                    with m.Elif(self.sink.tlast):
-                        m.next = "PADDING"
-
-            with m.State("PADDING"):
-                m.d.comb += [
-                    sink_tready.eq(0),
-                    self.source.tvalid.eq(0),
-                ]
+        with m.If(ready & (self.sink.tvalid | padding)):
+            with m.If(padding):
+                m.d.sync += [buffer[key].eq(buffer[key][len(self.sink[key]):]) for key in buffer.fields if key != 'tlast']
+            with m.Else():
                 m.d.sync += [
-                    buffer_tdata.eq(Cat(buffer_tdata[data_w_i:],
-                                        Const(0, shape=data_w_i))),
-                    beats_remaining.eq(beats_remaining - 1),
+                    *[buffer[key]       .eq(Cat(buffer[key][len(self.sink[key]):], self.sink[key])) for key in buffer.fields if key != 'tlast'],
+                    buffer.tlast        .eq(self.sink.tlast),
+                    padding             .eq(self.sink.tlast),
                 ]
-                if self.has_tuser:
-                    m.d.sync += buffer_tuser.eq(Cat(buffer_tuser[user_w_i:], Const(0, shape=user_w_i)))
-                if self.has_tkeep:
-                    m.d.sync += buffer_tkeep.eq(Cat(buffer_tkeep[keep_w_i:], Const(0, shape=keep_w_i)))
-                with m.If(is_last_subchunk):
-                    m.next = "WAITING_FOR_SLAVE"
 
-            with m.State("WAITING_FOR_SLAVE"):
-                m.d.comb += [
-                    sink_tready.eq(self.source.accepted()),
-                    self.source.tvalid.eq(1),
+            with m.If(is_last_subchunk):
+                m.d.sync += [
+                    beats_remaining     .eq(convertion_ratio - 1),
+                    padding             .eq(0),
+                    self.source.tvalid  .eq(1),
                 ]
-                with m.If(self.source.accepted()):
-                    with m.If(self.sink.accepted()):
-                        m.d.sync += [
-                            buffer_tdata.eq(Cat(
-                                Const(0, shape=data_w_o-data_w_i),
-                                self.sink.tdata
-                            )),
-                            buffer_tlast.eq(self.sink.tlast),
-                            beats_remaining.eq(convertion_ratio - 1 - 1),
-                        ]
-                        if self.has_tuser:
-                            m.d.sync += buffer_tuser.eq(Cat(
-                                Const(0, shape=user_w_o-user_w_i),
-                                self.sink.tuser
-                            ))
-                        if self.has_tkeep:
-                            m.d.sync += buffer_tkeep.eq(Cat(
-                                Const(0, shape=keep_w_o-keep_w_i),
-                                self.sink.tkeep
-                            ))
-                        if convertion_ratio == 1:
-                            m.next = "WAITING_FOR_SLAVE"
-                        else:
-                            with m.If(self.sink.tlast):
-                                m.next = "PADDING"
-                            with m.Else():
-                                m.next = "CONVERTING"
-                    with m.Else():
-                        m.d.sync += [
-                            buffer_tdata.eq(0),
-                            buffer_tlast.eq(0),
-                            beats_remaining.eq(convertion_ratio - 1),
-                        ]
-                        if self.has_tuser:
-                            m.d.sync += buffer_tuser.eq(0)
-                        if self.has_tkeep:
-                            m.d.sync += buffer_tkeep.eq(0)
-                        m.next = "CONVERTING"
+            with m.Else():
+                m.d.sync += beats_remaining.eq(beats_remaining - 1)
 
         return m
 
