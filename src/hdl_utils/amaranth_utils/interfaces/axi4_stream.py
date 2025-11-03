@@ -154,6 +154,8 @@ class AXI4StreamInterface(wiring.PureInterface):
         #     start_bit += width
         # return ops
 
+    def __getitem__(self, value):
+        return getattr(self, value)
 
 class SlaveAXI4StreamInterface(AXI4StreamInterface):
 
