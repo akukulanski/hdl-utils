@@ -10,24 +10,30 @@ class AXIStreamWidthConverterDown(Elaboratable):
         data_w_i: int,
         data_w_o: int,
         user_w_i: int,
+        no_tkeep = False,
     ):
         assert data_w_i > 0
         assert data_w_o > 0
-        assert user_w_i > 0
-        assert data_w_o % 8 == 0
+        assert user_w_i >= 0
+        # assert data_w_o % 8 == 0
         assert data_w_i % data_w_o == 0
         assert (user_w_i * data_w_o) % data_w_i == 0
         user_w_o = (user_w_i * data_w_o) // data_w_i
         self.sink = AXI4StreamSignature.create_slave(
             data_w=data_w_i,
             user_w=user_w_i,
+            no_tkeep=no_tkeep,
             path=['s_axis'],
         )
         self.source = AXI4StreamSignature.create_master(
             data_w=data_w_o,
             user_w=user_w_o,
+            no_tkeep=no_tkeep,
             path=['m_axis'],
         )
+
+        self.has_tkeep = not no_tkeep
+        self.has_tuser = user_w_i > 0
 
     def get_ports(self):
         return self.sink.extract_signals() + self.source.extract_signals()
@@ -36,31 +42,36 @@ class AXIStreamWidthConverterDown(Elaboratable):
         m = Module()
 
         data_w_i = len(self.sink.tdata)
-        user_w_i = len(self.sink.tuser)
-        keep_w_i = len(self.sink.tkeep)
         data_w_o = len(self.source.tdata)
-        user_w_o = len(self.source.tuser)
-        keep_w_o = len(self.source.tkeep)
+
+        if self.has_tuser:
+            user_w_o = len(self.source.tuser)
+        if self.has_tkeep:
+            keep_w_o = len(self.source.tkeep)
         convertion_ratio = data_w_i // data_w_o
 
         buffer_tlast = Signal.like(self.sink.tlast)
         buffer_tdata = Signal.like(self.sink.tdata)
-        buffer_tuser = Signal.like(self.sink.tuser)
-        buffer_tkeep = Signal.like(self.sink.tkeep)
+        if self.has_tuser:
+            buffer_tuser = Signal.like(self.sink.tuser)
+        if self.has_tkeep:
+            buffer_tkeep = Signal.like(self.sink.tkeep)
         beats_remaining = Signal(range(convertion_ratio))
         is_last_subchunk = Signal()
         # only_null_bytes_remaining: if only null bytes (bytes w/ tkeep = 0) are
         # remaining in the last chunk (chunk w/ tlast = 1), then is_last_chunk is
         # true to finish the conversion early and avoid introducing null bytes that
         # are not always properly handled by third-party ip.
-        only_null_bytes_remaining = Signal()
+        if self.has_tkeep:
+            only_null_bytes_remaining = Signal()
+            m.d.comb += only_null_bytes_remaining.eq(~(buffer_tkeep[keep_w_o:]).any())
+        else:
+            only_null_bytes_remaining = Const(0, 1)
+
         is_last_chunk = Signal()
 
         m.d.comb += [
             is_last_subchunk.eq(beats_remaining == 0),
-            only_null_bytes_remaining.eq(
-                ~ (buffer_tkeep[keep_w_o:]).any()
-            ),
             is_last_chunk.eq(
                 buffer_tlast & (is_last_subchunk | only_null_bytes_remaining)
             ),
@@ -76,17 +87,22 @@ class AXIStreamWidthConverterDown(Elaboratable):
                     self.source.tvalid.eq(0),
                     self.source.tlast.eq(0),
                     self.source.tdata.eq(0),
-                    self.source.tuser.eq(0),
-                    self.source.tkeep.eq(0),
                 ]
+                if self.has_tkeep:
+                    m.d.comb += self.source.tkeep.eq(0)
+                if self.has_tuser:
+                    m.d.comb += self.source.tuser.eq(0)
                 with m.If(self.sink.accepted()):
                     m.d.sync += [
                         buffer_tlast.eq(self.sink.tlast),
                         buffer_tdata.eq(self.sink.tdata),
-                        buffer_tuser.eq(self.sink.tuser),
-                        buffer_tkeep.eq(self.sink.tkeep),
                         beats_remaining.eq(convertion_ratio - 1),
                     ]
+                    if self.has_tuser:
+                        m.d.sync += buffer_tuser.eq(self.sink.tuser)
+                    if self.has_tkeep:
+                        m.d.sync += buffer_tkeep.eq(self.sink.tkeep)
+
                     m.next = "CONVERTING"
 
             with m.State("CONVERTING"):
@@ -95,9 +111,12 @@ class AXIStreamWidthConverterDown(Elaboratable):
                     self.source.tvalid.eq(1),
                     self.source.tlast.eq(is_last_chunk),
                     self.source.tdata.eq(buffer_tdata[0:data_w_o]),
-                    self.source.tuser.eq(buffer_tuser[0:user_w_o]),
-                    self.source.tkeep.eq(buffer_tkeep[0:keep_w_o]),
                 ]
+                if self.has_tuser:
+                    m.d.comb += self.source.tuser.eq(buffer_tuser[0:user_w_o]),
+                if self.has_tkeep:
+                    m.d.comb += self.source.tkeep.eq(buffer_tkeep[0:keep_w_o])
+
                 with m.If(self.source.accepted()):
                     with m.If(~is_last_subchunk & ~is_last_chunk):
                         m.d.sync += [
@@ -106,35 +125,43 @@ class AXIStreamWidthConverterDown(Elaboratable):
                                 buffer_tdata[data_w_o:],
                                 Const(0, shape=data_w_o))
                             ),
-                            # shift register buffer_tuser
-                            buffer_tuser.eq(Cat(
-                                buffer_tuser[user_w_o:],
-                                Const(0, shape=user_w_o))
-                            ),
-                            # shift register buffer_tkeep
-                            buffer_tkeep.eq(Cat(
-                                buffer_tkeep[keep_w_o:],
-                                Const(0, shape=keep_w_o))
-                            ),
                             # decrease beats remaining by 1
                             beats_remaining.eq(beats_remaining - 1)
                         ]
+                        if self.has_tuser:
+                            # shift register buffer_tuser
+                            m.d.sync += buffer_tuser.eq(Cat(
+                                buffer_tuser[user_w_o:],
+                                Const(0, shape=user_w_o))
+                            )
+                        if self.has_tkeep:
+                            # shift register buffer_tkeep
+                            m.d.sync += buffer_tkeep.eq(Cat(
+                                buffer_tkeep[keep_w_o:],
+                                Const(0, shape=keep_w_o))
+                            )
+
                     with m.Elif(self.sink.accepted()):
                         m.d.sync += [
                             buffer_tlast.eq(self.sink.tlast),
                             buffer_tdata.eq(self.sink.tdata),
-                            buffer_tuser.eq(self.sink.tuser),
-                            buffer_tkeep.eq(self.sink.tkeep),
                             beats_remaining.eq(convertion_ratio - 1),
                         ]
+                        if self.has_tuser:
+                            m.d.sync += buffer_tuser.eq(self.sink.tuser)
+                        if self.has_tkeep:
+                            m.d.sync += buffer_tkeep.eq(self.sink.tkeep)
+
                     with m.Else():
                         m.d.sync += [
                             buffer_tlast.eq(0),
                             buffer_tdata.eq(0),
-                            buffer_tuser.eq(0),
-                            buffer_tkeep.eq(0),
                             beats_remaining.eq(0),
                         ]
+                        if self.has_tuser:
+                            m.d.sync += buffer_tuser.eq(0)
+                        if self.has_tkeep:
+                            m.d.sync += buffer_tkeep.eq(0)
                         m.next = "IDLE"
 
         return m
@@ -147,24 +174,30 @@ class AXIStreamWidthConverterUp(Elaboratable):
         data_w_i: int,
         data_w_o: int,
         user_w_i: int,
+        no_tkeep = False,
     ):
         assert data_w_i > 0
         assert data_w_o > 0
-        assert user_w_i > 0
-        assert data_w_i % 8 == 0
+        assert user_w_i >= 0
+        # assert data_w_i % 8 == 0
         assert data_w_o % data_w_i == 0
         assert (user_w_i * data_w_o) % data_w_i == 0
         user_w_o = (user_w_i * data_w_o) // data_w_i
         self.sink = AXI4StreamSignature.create_slave(
             data_w=data_w_i,
             user_w=user_w_i,
+            no_tkeep=no_tkeep,
             path=['s_axis'],
         )
         self.source = AXI4StreamSignature.create_master(
             data_w=data_w_o,
             user_w=user_w_o,
+            no_tkeep=no_tkeep,
             path=['m_axis'],
         )
+
+        self.has_tkeep = not no_tkeep
+        self.has_tuser = user_w_i > 0
 
     def get_ports(self):
         return self.sink.extract_signals() + self.source.extract_signals()
@@ -173,17 +206,23 @@ class AXIStreamWidthConverterUp(Elaboratable):
         m = Module()
 
         data_w_i = len(self.sink.tdata)
-        user_w_i = len(self.sink.tuser)
-        keep_w_i = len(self.sink.tkeep)
         data_w_o = len(self.source.tdata)
-        user_w_o = len(self.source.tuser)
-        keep_w_o = len(self.source.tkeep)
         convertion_ratio = data_w_o // data_w_i
+
+        if self.has_tuser:
+            user_w_o = len(self.source.tuser)
+            user_w_i = len(self.sink.tuser)
+            buffer_tuser = Signal.like(self.source.tuser)
+            m.d.comb += self.source.tuser.eq(buffer_tuser)
+
+        if self.has_tkeep:
+            keep_w_i = len(self.sink.tkeep)
+            keep_w_o = len(self.source.tkeep)
+            buffer_tkeep = Signal.like(self.source.tkeep)
+            m.d.comb += self.source.tkeep.eq(buffer_tkeep)
 
         buffer_tlast = Signal.like(self.source.tlast)
         buffer_tdata = Signal.like(self.source.tdata)
-        buffer_tuser = Signal.like(self.source.tuser)
-        buffer_tkeep = Signal.like(self.source.tkeep)
         beats_remaining = Signal(range(convertion_ratio),
                                  init=convertion_ratio-1)
         is_last_subchunk = Signal()
@@ -191,8 +230,6 @@ class AXIStreamWidthConverterUp(Elaboratable):
         m.d.comb += [
             is_last_subchunk.eq(beats_remaining == 0),
             self.source.tdata.eq(buffer_tdata),
-            self.source.tuser.eq(buffer_tuser),
-            self.source.tkeep.eq(buffer_tkeep),
             self.source.tlast.eq(buffer_tlast),
         ]
 
@@ -209,13 +246,13 @@ class AXIStreamWidthConverterUp(Elaboratable):
                     m.d.sync += [
                         buffer_tdata.eq(Cat(buffer_tdata[data_w_i:],
                                             self.sink.tdata)),
-                        buffer_tuser.eq(Cat(buffer_tuser[user_w_i:],
-                                            self.sink.tuser)),
-                        buffer_tkeep.eq(Cat(buffer_tkeep[keep_w_i:],
-                                            self.sink.tkeep)),
                         buffer_tlast.eq(self.sink.tlast),
                         beats_remaining.eq(beats_remaining - 1),
                     ]
+                    if self.has_tuser:
+                        m.d.sync += buffer_tuser.eq(Cat(buffer_tuser[user_w_i:], self.sink.tuser))
+                    if self.has_tkeep:
+                        m.d.sync += buffer_tkeep.eq(Cat(buffer_tkeep[keep_w_i:], self.sink.tkeep))
                     with m.If(is_last_subchunk):
                         m.next = "WAITING_FOR_SLAVE"
                     with m.Elif(self.sink.tlast):
@@ -229,12 +266,12 @@ class AXIStreamWidthConverterUp(Elaboratable):
                 m.d.sync += [
                     buffer_tdata.eq(Cat(buffer_tdata[data_w_i:],
                                         Const(0, shape=data_w_i))),
-                    buffer_tuser.eq(Cat(buffer_tuser[user_w_i:],
-                                        Const(0, shape=user_w_i))),
-                    buffer_tkeep.eq(Cat(buffer_tkeep[keep_w_i:],
-                                        Const(0, shape=keep_w_i))),
                     beats_remaining.eq(beats_remaining - 1),
                 ]
+                if self.has_tuser:
+                    m.d.sync += buffer_tuser.eq(Cat(buffer_tuser[user_w_i:], Const(0, shape=user_w_i)))
+                if self.has_tkeep:
+                    m.d.sync += buffer_tkeep.eq(Cat(buffer_tkeep[keep_w_i:], Const(0, shape=keep_w_i)))
                 with m.If(is_last_subchunk):
                     m.next = "WAITING_FOR_SLAVE"
 
@@ -250,17 +287,19 @@ class AXIStreamWidthConverterUp(Elaboratable):
                                 Const(0, shape=data_w_o-data_w_i),
                                 self.sink.tdata
                             )),
-                            buffer_tuser.eq(Cat(
-                                Const(0, shape=user_w_o-user_w_i),
-                                self.sink.tuser
-                            )),
-                            buffer_tkeep.eq(Cat(
-                                Const(0, shape=keep_w_o-keep_w_i),
-                                self.sink.tkeep
-                            )),
                             buffer_tlast.eq(self.sink.tlast),
                             beats_remaining.eq(convertion_ratio - 1 - 1),
                         ]
+                        if self.has_tuser:
+                            m.d.sync += buffer_tuser.eq(Cat(
+                                Const(0, shape=user_w_o-user_w_i),
+                                self.sink.tuser
+                            ))
+                        if self.has_tkeep:
+                            m.d.sync += buffer_tkeep.eq(Cat(
+                                Const(0, shape=keep_w_o-keep_w_i),
+                                self.sink.tkeep
+                            ))
                         if convertion_ratio == 1:
                             m.next = "WAITING_FOR_SLAVE"
                         else:
@@ -271,11 +310,13 @@ class AXIStreamWidthConverterUp(Elaboratable):
                     with m.Else():
                         m.d.sync += [
                             buffer_tdata.eq(0),
-                            buffer_tuser.eq(0),
-                            buffer_tkeep.eq(0),
                             buffer_tlast.eq(0),
                             beats_remaining.eq(convertion_ratio - 1),
                         ]
+                        if self.has_tuser:
+                            m.d.sync += buffer_tuser.eq(0)
+                        if self.has_tkeep:
+                            m.d.sync += buffer_tkeep.eq(0)
                         m.next = "CONVERTING"
 
         return m
