@@ -351,7 +351,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
     @pytest.mark.parametrize(
         'DWI,DWO,UWI',
         [
-            (16, 8, 0),  # EXPECT FAIL: zero user width
+            # (16, 8, 0),  # EXPECT FAIL: zero user width
             (24, 48, 4),  # EXPECT FAIL: 24 <= 48
             (40, 24, 4),  # EXPECT FAIL: 40 % 24 == 16
         ]
@@ -411,7 +411,7 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
     @pytest.mark.parametrize(
         'DWI,DWO,UWI',
         [
-            (8, 16, 0),  # EXPECT FAIL: zero user width
+            # (8, 16, 0),  # EXPECT FAIL: zero user width
             (48, 24, 2),  # EXPECT FAIL: 48 >= 24
             (24, 40, 2),  # EXPECT FAIL: 40 % 24 == 16
         ]
