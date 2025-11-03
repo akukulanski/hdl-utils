@@ -530,3 +530,31 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
         }
         self.run_testbench(core, test_module, ports,
                            vcd_file=vcd_file, env=env)
+
+    @pytest.mark.parametrize('data_w,user_w', [(8, 2)])
+    def test_axi_stream_packet_rate_limiter(self, data_w: int, user_w: int):
+        from hdl_utils.amaranth_utils.axi_stream_packet_rate_limiter import AXISPacketRateLimiter
+
+        core = AXISPacketRateLimiter(
+            data_w=data_w,
+            user_w=user_w,
+        )
+        ports = core.get_ports()
+        env = {
+            'P_DATA_W': str(data_w),
+            'P_USER_W': str(user_w),
+            'P_HAS_TKEEP': str(int(bool(hasattr(core.sink, 'tkeep')))),
+            'P_TEST_LENGTH': str(32),
+        }
+
+        # Test pass through
+        test_module = 'tb.tb_axi_stream_pass_through'
+        base_name = f'tb_axi_stream_packet_rate_limiter_pass_through_{data_w}_{user_w}'
+        vcd_file = in_waveform_dir(f'{base_name}.vcd')
+        self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
+
+        # Test limiter
+        test_module = 'tb.tb_axi_stream_packet_rate_limiter'
+        base_name = f'tb_axi_stream_packet_rate_limiter_{data_w}_{user_w}'
+        vcd_file = in_waveform_dir(f'{base_name}.vcd')
+        self.run_testbench(core, test_module, ports, vcd_file=vcd_file, env=env)
