@@ -1,6 +1,7 @@
 from amaranth import Elaboratable, Module, Signal, Cat, Const, ResetSignal, Record
 
 from hdl_utils.amaranth_utils.interfaces.axi4_stream import AXI4StreamSignature
+import math
 
 
 class AXIStreamWidthConverterDown(Elaboratable):
@@ -61,28 +62,25 @@ class AXIStreamWidthConverterDown(Elaboratable):
         else:
             only_null_bytes_remaining = Const(0, 1)
 
-        is_last_chunk = Signal()
-
         m.d.comb += [
             is_last_subchunk        .eq(~beats_remaining.any() | only_null_bytes_remaining),
-            is_last_chunk           .eq(buffer.tlast & is_last_subchunk),
             self.sink.tready        .eq(~self.source.tvalid | (self.source.tready & is_last_subchunk)),
             *[self.source[key]      .eq(buffer[key]) for key in buffer.fields if key != 'tlast'],
-            self.source.tlast       .eq(is_last_chunk),
+            self.source.tlast       .eq(buffer.tlast & is_last_subchunk),
         ]
 
-        with m.If(self.source.accepted()):
+        with m.If(self.source.tready):
             m.d.sync += [
                 *[buffer[key]       .eq(buffer[key][len(self.source[key]):]) for key in buffer.fields if key != 'tlast'],
                 beats_remaining     .eq(beats_remaining - 1),
-                self.source.tvalid  .eq(~is_last_subchunk),
+                self.source.tvalid  .eq(self.source.tvalid & ~is_last_subchunk),
             ]
 
-        with m.If(self.sink.accepted()):
+        with m.If(self.sink.tready):
             m.d.sync += [
                 *[buffer[key]       .eq(self.sink[key]) for key in buffer.fields],
                 beats_remaining     .eq(convertion_ratio - 1),
-                self.source.tvalid  .eq(1),
+                self.source.tvalid  .eq(self.sink.tvalid),
             ]
 
         return m
@@ -102,7 +100,7 @@ class AXIStreamWidthConverterUp(Elaboratable):
         # assert data_w_i % 8 == 0
         assert data_w_o % data_w_i == 0
         assert (user_w_i * data_w_o) % data_w_i == 0
-        user_w_o = (user_w_i * data_w_o) // data_w_i
+        self.user_w_o = (user_w_i * data_w_o) // data_w_i
         self.sink = AXI4StreamSignature.create_slave(
             data_w=data_w_i,
             user_w=user_w_i,
@@ -111,7 +109,7 @@ class AXIStreamWidthConverterUp(Elaboratable):
         )
         self.source = AXI4StreamSignature.create_master(
             data_w=data_w_o,
-            user_w=user_w_o,
+            user_w=self.user_w_o,
             no_tkeep=no_tkeep,
             path=['m_axis'],
         )
@@ -168,6 +166,96 @@ class AXIStreamWidthConverterUp(Elaboratable):
 
         return m
 
+class AXIStreamWidthConverter(Elaboratable):
+
+    NONE    = 0
+    UP      = 1
+    DOWN    = 2
+    BOTH    = 3
+
+    def __init__(
+        self,
+        data_w_i: int,
+        data_w_o: int,
+        user_w_i: int,
+        no_tkeep = False,
+    ):
+        assert data_w_i > 0
+        assert data_w_o > 0
+        assert user_w_i >= 0
+
+        if data_w_i == data_w_o:
+            self.convertion_mode = self.NONE
+            self.sink = AXI4StreamSignature.create_slave(
+                data_w=data_w_i,
+                user_w=user_w_i,
+                no_tkeep=no_tkeep,
+                path=['s_axis'],
+            )
+            self.source = AXI4StreamSignature.create_master(
+                data_w=data_w_o,
+                user_w=user_w_i,
+                no_tkeep=no_tkeep,
+                path=['m_axis'],
+            )
+
+        elif (data_w_i / data_w_o).is_integer():
+            self.convertion_mode = self.DOWN
+            self.converter = AXIStreamWidthConverterDown(
+                data_w_i = data_w_i,
+                data_w_o = data_w_o,
+                user_w_i = user_w_i,
+                no_tkeep = no_tkeep
+            )
+            self.sink = self.converter.sink
+            self.source = self.converter.source
+
+        elif (data_w_o / data_w_i).is_integer():
+            self.convertion_mode = self.UP
+            self.converter = AXIStreamWidthConverterUp(
+                data_w_i = data_w_i,
+                data_w_o = data_w_o,
+                user_w_i = user_w_i,
+                no_tkeep = no_tkeep
+            )
+            self.sink = self.converter.sink
+            self.source = self.converter.source
+
+        else:
+            self.convertion_mode = self.BOTH
+            intermediate_width = math.lcm(data_w_i, data_w_o)
+            self.converter_up = AXIStreamWidthConverterUp(
+                data_w_i = data_w_i,
+                data_w_o = intermediate_width,
+                user_w_i = user_w_i,
+                no_tkeep = no_tkeep,
+            )
+            self.converter_down = AXIStreamWidthConverterDown(
+                data_w_i = intermediate_width,
+                data_w_o = data_w_o,
+                user_w_i = self.converter_up.user_w_o,
+                no_tkeep = no_tkeep,
+            )
+
+            self.sink = self.converter_up.sink
+            self.source = self.converter_down.source
+
+    def get_ports(self):
+        return self.sink.extract_signals() + self.source.extract_signals()
+
+    def elaborate(self, platform):
+        if self.convertion_mode in [self.DOWN, self.UP]:
+            return self.converter.elaborate(platform)
+        else:
+            m = Module()
+
+            if self.convertion_mode == self.NONE:
+                self.sink.connect(m, self.source)
+            else:
+                m.submodules.converter_up = self.converter_up
+                m.submodules.converter_down = self.converter_down
+                self.converter_up.source.connect(m, self.converter_down.sink)
+            return m
 
 def parse_args(sys_args=None):
     import argparse
