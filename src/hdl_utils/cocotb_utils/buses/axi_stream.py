@@ -253,12 +253,14 @@ class AXIStreamMasterDriver(AXIStreamBase, AXIStreamMonitorMixin):
             )
         while burps and random.getrandbits(1):
             await RisingEdge(self.clock)
-        await self._send_write_data(
-            data=data[-1],
-            last=1,
-            keep=keep[-1],
-            user=user[-1]
-        )
+
+        if len(data):
+            await self._send_write_data(
+                data=data[-1],
+                last=1,
+                keep=keep[-1],
+                user=user[-1]
+            )
 
     async def write_multiple(
         self,
@@ -317,9 +319,13 @@ class AXIStreamSlaveDriver(AXIStreamBase, AXIStreamMonitorMixin):
         """Receive data."""
         data = []
         count = 0
+
+        if length is None and ignore_last:
+            raise ValueError("Stream read will loop forever if length is not provided and ignore_last is True")
+
         if force_sync_clk_edge:
             await RisingEdge(self.clock)
-        while True:
+        while length is None or count < length:
             while burps and random.getrandbits(1):
                 await RisingEdge(self.clock)
             current_values, tlast = await self._recv_rd_data()
@@ -329,8 +335,9 @@ class AXIStreamSlaveDriver(AXIStreamBase, AXIStreamMonitorMixin):
                 tdata = current_values[0]
                 data.append(tdata)
             count += 1
-            if (tlast and not ignore_last) or (count == length):
-                return data
+            if tlast and not ignore_last:
+                break
+        return data
 
     async def read_multiple(
         self,
