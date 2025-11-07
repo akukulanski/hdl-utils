@@ -244,18 +244,16 @@ class AXIStreamWidthConverter(Elaboratable):
         return self.sink.extract_signals() + self.source.extract_signals()
 
     def elaborate(self, platform):
+        m = Module()
         if self.convertion_mode in [self.DOWN, self.UP]:
-            return self.converter.elaborate(platform)
+            m.submodules.converter = self.converter
+        elif self.convertion_mode == self.NONE:
+            self.sink.connect(m, self.source)
         else:
-            m = Module()
-
-            if self.convertion_mode == self.NONE:
-                self.sink.connect(m, self.source)
-            else:
-                m.submodules.converter_up = self.converter_up
-                m.submodules.converter_down = self.converter_down
-                self.converter_up.source.connect(m, self.converter_down.sink)
-            return m
+            m.submodules.converter_up = self.converter_up
+            m.submodules.converter_down = self.converter_down
+            self.converter_up.source.connect(m, self.converter_down.sink)
+        return m
 
 def parse_args(sys_args=None):
     import argparse
