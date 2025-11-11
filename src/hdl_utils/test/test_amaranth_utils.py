@@ -317,6 +317,8 @@ class TestbenchCoresAmaranth(TemplateTestbenchAmaranth):
             (8, 24, 1, False),
             (24, 48, 2, False),
             (24, 48, 2, True),
+
+            (8, 8, 1, True),
         ]
     )
     def test_width_converter(self, DWI, DWO, UWI, add_skid_buffers):

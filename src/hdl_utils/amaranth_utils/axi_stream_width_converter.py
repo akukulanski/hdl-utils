@@ -248,7 +248,7 @@ class AXIStreamWidthConverter(Elaboratable):
         if self.convertion_mode in [self.DOWN, self.UP]:
             m.submodules.converter = self.converter
         elif self.convertion_mode == self.NONE:
-            self.sink.connect(m, self.source)
+            self.sink.as_master().connect(m, self.source.as_slave())
         else:
             m.submodules.converter_up = self.converter_up
             m.submodules.converter_down = self.converter_down
@@ -277,28 +277,17 @@ def parse_args(sys_args=None):
 def main(sys_args=None):
     from hdl_utils.amaranth_utils.generate_verilog import generate_verilog
     args = parse_args(sys_args)
-    if args.data_width_in > args.data_width_out:
-        name = args.name or 'axi_stream_width_converter_down'
-        core = AXIStreamWidthConverterDown(
-            data_w_i=args.data_width_in,
-            data_w_o=args.data_width_out,
-            user_w_i=args.user_width_in,
-        )
-    elif args.data_width_in < args.data_width_out:
-        name = args.name or 'axi_stream_width_converter_up'
-        core = AXIStreamWidthConverterUp(
-            data_w_i=args.data_width_in,
-            data_w_o=args.data_width_out,
-            user_w_i=args.user_width_in,
-        )
-    else:
-        raise NotImplementedError()
-        # name = args.name or 'axi_stream_width_converter_up'
-        # core = AXIStreamWidthConverterPassThrough(
-        #     data_w_i=args.data_width_in,
-        #     data_w_o=args.data_width_out,
-        #     user_w_i=args.user_width_in,
-        # )
+    core = AXIStreamWidthConverter(
+        data_w_i=args.data_width_in,
+        data_w_o=args.data_width_out,
+        user_w_i=args.user_width_in,
+    )
+    name = args.name or {
+        AXIStreamWidthConverter.DOWN: 'axi_stream_width_converter_down',
+        AXIStreamWidthConverter.UP: 'axi_stream_width_converter_up',
+        AXIStreamWidthConverter.BOTH: 'axi_stream_width_converter_frac',
+        AXIStreamWidthConverter.NONE: 'axi_stream_pass_through',
+    }[core.convertion_mode]
 
     if args.active_low_reset:
         from hdl_utils.amaranth_utils.rstn_wrapper import RstnWrapper
