@@ -19,7 +19,9 @@ def extract_signals_from_wiring(signature: wiring.Signature):
     Signature can have signals or nested signatures.
     This generator finds signals recursively.
     """
-    signature_dict = signature.__dict__
+    signature_dict = getattr(signature, '__dict__', None)
+    if not signature_dict:
+        return
     for k in signature_dict.keys():
         if k == 'signature':
             continue
