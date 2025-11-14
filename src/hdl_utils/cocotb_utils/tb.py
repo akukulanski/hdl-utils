@@ -16,9 +16,9 @@ class BaseTestbench:
         active-low (rsn_n) signal.
         """
         try:
-            value = self.dut.rst.value.integer
+            value = int(self.dut.rst.value)
         except AttributeError:
-            value = self.dut.rst_n.value.integer
+            value = self.dut.rst_n.value
             value = int(not value)
         return value
 

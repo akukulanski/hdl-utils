@@ -110,7 +110,7 @@ async def dma_write(
     dut.wr_qos.value = qos
     p_wr = start_soon(tb.m_axis.write(data, burps=burps))
     await RisingEdge(dut.clk)
-    while dut.wr_ack.value.integer == 0:
+    while dut.wr_ack.value == 0:
         await RisingEdge(dut.clk)
     dut.wr_start.value = 0
     dut._log.info(f'Wairing dma write to finish...')
@@ -131,7 +131,7 @@ async def dma_read(
     dut.rd_qos.value = qos
     p_rd = start_soon(tb.s_axis.read(burps=burps))
     await RisingEdge(dut.clk)
-    while dut.rd_ack.value.integer == 0:
+    while dut.rd_ack.value == 0:
         await RisingEdge(dut.clk)
     dut.rd_start.value = 0
     dut._log.info(f'Wairing dma read to finish...')

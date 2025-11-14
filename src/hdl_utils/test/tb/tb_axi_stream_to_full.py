@@ -146,7 +146,7 @@ async def write_burst(
     dut.wr_valid.value = 1
     p_wr = start_soon(tb.m_axis.write(data))
     await RisingEdge(dut.clk)
-    while dut.wr_ready.value.integer == 0:
+    while dut.wr_ready.value == 0:
         await RisingEdge(dut.clk)
 
     dut.wr_valid.value = 0
@@ -168,7 +168,7 @@ async def read_burst(
     dut.rd_valid.value = 1
     p_rd = start_soon(tb.s_axis.read())
     await RisingEdge(dut.clk)
-    while dut.rd_ready.value.integer == 0:
+    while dut.rd_ready.value == 0:
         await RisingEdge(dut.clk)
 
     dut.rd_valid.value = 0
