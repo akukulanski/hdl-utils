@@ -81,6 +81,7 @@ jobs:
       if: ${{ github.repository == 'akukulanski/hdl-utils' && github.event_name == 'push' && github.event.ref == 'refs/heads/main' }}
       # Bump version of existing package in Test PyPi
       run: |
+        pip install bumpversion
         ./scripts/bump_test_pypi_version.sh
     - name: Build package
       run: |
