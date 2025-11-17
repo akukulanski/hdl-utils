@@ -15,6 +15,7 @@ dependencies = [
     "amaranth-cocotb",
     "ipython>=9.6.0",
     "cocotb-test~=0.2.6",
+    "bumpversion>=0.6.0",
 ]
 
 [build-system]
